@@ -24,16 +24,16 @@ interface DataContextType {
   // Topics
   topics: Topic[];
   getSubtopics: (topicId: string) => Subtopic[];
-  loadSubtopics: (topicId: string) => Promise<void>;
+  loadSubtopics: (topicId: string, forceRefresh?: boolean) => Promise<void>;
   getLesson: (subtopicId: string) => Lesson | undefined;
-  loadLesson: (subtopicId: string) => Promise<void>;
+  loadLesson: (subtopicId: string, forceRefresh?: boolean) => Promise<void>;
   
   // Admin operations
   saveTopicRow: (topic: Partial<Topic> & { id?: string }) => Promise<void>;
   removeTopicRow: (id: string) => Promise<void>;
   reorderTopicRows: (orderedIds: string[]) => Promise<void>;
   saveSubtopicRow: (subtopic: Partial<Subtopic> & { id?: string; topicId: string }) => Promise<void>;
-  removeSubtopicRow: (id: string) => Promise<void>;
+  removeSubtopicRow: (id: string, topicId: string) => Promise<void>;
   saveLessonBlocks: (subtopicId: string, blocks: LessonBlock[]) => Promise<void>;
   saveHomepageContent: (content: HomepageContent) => Promise<void>;
   saveAboutContent: (content: AboutContent) => Promise<void>;
@@ -101,15 +101,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return subtopicsCache.current.get(topicId) || [];
   }, []);
 
-  const loadSubtopics = useCallback(async (topicId: string) => {
-    if (subtopicsCache.current.has(topicId)) {
+  // FIX: Added forceRefresh parameter. When true, bypasses the cache check so
+  // admin saves always reload fresh data instead of showing stale subtopics.
+  const loadSubtopics = useCallback(async (topicId: string, forceRefresh = false) => {
+    if (!forceRefresh && subtopicsCache.current.has(topicId)) {
       return;
     }
 
     try {
       const subtopics = await fetchSubtopics(topicId);
       subtopicsCache.current.set(topicId, subtopics);
-      // Force re-render
+      // Force re-render so consuming components pick up the new cache data
       setTopics((prev) => [...prev]);
     } catch (error) {
       console.error('Error loading subtopics:', error);
@@ -120,8 +122,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return lessonsCache.current.get(subtopicId);
   }, []);
 
-  const loadLesson = useCallback(async (subtopicId: string) => {
-    if (lessonsCache.current.has(subtopicId)) {
+  // FIX: Added forceRefresh parameter for consistent API with loadSubtopics.
+  const loadLesson = useCallback(async (subtopicId: string, forceRefresh = false) => {
+    if (!forceRefresh && lessonsCache.current.has(subtopicId)) {
       return;
     }
 
@@ -153,6 +156,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const removeTopicRow = useCallback(async (id: string) => {
     await deleteTopic(id);
+    // Clear all subtopics for the deleted topic from cache
+    subtopicsCache.current.delete(id);
     await reloadTopics();
   }, [reloadTopics]);
 
@@ -161,24 +166,28 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     await reloadTopics();
   }, [reloadTopics]);
 
+  // FIX: After saving, explicitly force-reload subtopics for the affected topic
+  // so the admin UI immediately shows the updated list without a manual refresh.
   const saveSubtopicRow = useCallback(async (subtopic: Partial<Subtopic> & { id?: string; topicId: string }) => {
     await upsertSubtopic(subtopic);
-    // Clear cache for this topic to force reload
     subtopicsCache.current.delete(subtopic.topicId);
-  }, []);
+    await loadSubtopics(subtopic.topicId, true);
+  }, [loadSubtopics]);
 
-  const removeSubtopicRow = useCallback(async (id: string) => {
+  // FIX: removeSubtopicRow now requires topicId so we can invalidate only that
+  // topic's cache instead of clearing ALL subtopic caches (which caused
+  // unnecessary re-fetches for every other topic in the app).
+  const removeSubtopicRow = useCallback(async (id: string, topicId: string) => {
     await deleteSubtopic(id);
-    // Clear all subtopic caches since we don't know which topic this belonged to
-    subtopicsCache.current.clear();
-  }, []);
+    subtopicsCache.current.delete(topicId);
+    await loadSubtopics(topicId, true);
+  }, [loadSubtopics]);
 
   const saveLessonBlocks = useCallback(async (subtopicId: string, blocks: LessonBlock[]) => {
     await upsertLesson(subtopicId, blocks);
-    // Clear cache for this lesson
+    // Clear and force-reload this specific lesson
     lessonsCache.current.delete(subtopicId);
-    // Reload the lesson
-    await loadLesson(subtopicId);
+    await loadLesson(subtopicId, true);
   }, [loadLesson]);
 
   const saveHomepageContent = useCallback(async (content: HomepageContent) => {

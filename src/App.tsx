@@ -16,6 +16,7 @@ import { ProgressPage } from '@/pages/ProgressPage';
 import { TestsPage } from '@/pages/TestsPage';
 import { BookmarksPage } from '@/pages/BookmarksPage';
 import { AdminPage } from '@/pages/AdminPage';
+import { Toaster } from 'sonner';
 
 // Protected Route Component
 interface ProtectedRouteProps {
@@ -76,11 +77,14 @@ function PublicRoute({ children, redirectIfAuthenticated = false }: PublicRouteP
 }
 
 // Layout with Navbar and Footer
+// FIX: When user is logged in the navbar has TWO bars (h-16 main + h-12 auth links = 28 units).
+// pt-16 was cutting off the top of every page for logged-in users. Now we use pt-28 for them.
 function MainLayout({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
   return (
     <div className="min-h-screen bg-[#050810]">
       <Navbar />
-      <main className="pt-16">
+      <main className={user ? 'pt-28' : 'pt-16'}>
         {children}
       </main>
       <Footer />
@@ -217,6 +221,7 @@ function App() {
       <AuthProvider>
         <DataProvider>
           <AppRoutes />
+          <Toaster position="top-right" richColors closeButton />
         </DataProvider>
       </AuthProvider>
     </BrowserRouter>

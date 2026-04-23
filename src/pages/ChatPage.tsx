@@ -1,5 +1,4 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Send, Paperclip, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,24 +8,29 @@ import { fetchProfilesBatch } from '@/services/profiles';
 import { FallbackImage } from '@/components/MediaFallback';
 import type { ChatMessage, UserProfile } from '@/types';
 
+// FIX: Removed the redundant useNavigate + useEffect redirect.
+// The route is already protected by <ProtectedRoute> in App.tsx.
+
 export function ChatPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  
+
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
   const [profiles, setProfiles] = useState<Map<string, UserProfile>>(new Map());
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
-  // Redirect if not logged in
+  // FIX: profilesRef mirrors the profiles state so the real-time subscription
+  // callback always reads the latest profile map without needing to be
+  // re-created every time profiles state changes.
+  const profilesRef = useRef<Map<string, UserProfile>>(new Map());
+
+  // Keep ref in sync with state
   useEffect(() => {
-    if (!user && !loading) {
-      navigate('/login');
-    }
-  }, [user, loading, navigate]);
+    profilesRef.current = profiles;
+  }, [profiles]);
 
   // Load initial messages
   useEffect(() => {
@@ -52,12 +56,12 @@ export function ChatPage() {
 
         setMessages(loadedMessages);
 
-        // Fetch profiles for all users
+        // Fetch profiles for all users in the initial batch
         const userIds = [...new Set(loadedMessages.map((m) => m.userId))];
         const profileMap = await fetchProfilesBatch(userIds);
         setProfiles(profileMap);
 
-        // Update messages with usernames
+        // Update messages with real usernames
         setMessages((prev) =>
           prev.map((msg) => {
             const profile = profileMap.get(msg.userId);
@@ -78,7 +82,10 @@ export function ChatPage() {
     loadMessages();
   }, []);
 
-  // Subscribe to real-time messages
+  // FIX: Real-time subscription has NO dependency on the `profiles` state.
+  // Instead it reads from profilesRef.current so the subscription is created
+  // exactly once and never torn down due to profile updates. This prevents
+  // dropped messages when a new user's profile is fetched.
   useEffect(() => {
     const channel = supabase
       .channel('chat_messages')
@@ -98,13 +105,19 @@ export function ChatPage() {
             created_at: string;
           };
 
-          // Fetch profile if not cached
-          if (!profiles.has(newMsg.user_id)) {
-            const profileMap = await fetchProfilesBatch([newMsg.user_id]);
-            setProfiles((prev) => new Map([...prev, ...profileMap]));
-          }
+          // Use the ref to check current cached profiles without re-subscribing
+          let profile = profilesRef.current.get(newMsg.user_id);
 
-          const profile = profiles.get(newMsg.user_id);
+          if (!profile) {
+            // Fetch missing profile and add to both ref and state
+            const profileMap = await fetchProfilesBatch([newMsg.user_id]);
+            const fetched = profileMap.get(newMsg.user_id);
+            if (fetched) {
+              profilesRef.current.set(newMsg.user_id, fetched);
+              setProfiles((prev) => new Map([...prev, [newMsg.user_id, fetched]]));
+              profile = fetched;
+            }
+          }
 
           const chatMessage: ChatMessage = {
             id: newMsg.id,
@@ -130,7 +143,7 @@ export function ChatPage() {
     return () => {
       channel.unsubscribe();
     };
-  }, [profiles]);
+  }, []); // Empty deps — subscription is stable for the lifetime of the component
 
   // Auto-scroll to bottom
   useEffect(() => {
@@ -145,7 +158,6 @@ export function ChatPage() {
     try {
       let imageUrl: string | null = null;
 
-      // Handle image upload
       const file = fileInputRef.current?.files?.[0];
       if (file) {
         const fileExt = file.name.split('.').pop();
@@ -165,7 +177,6 @@ export function ChatPage() {
         imageUrl = urlData.publicUrl;
       }
 
-      // Send message
       const { error } = await supabase.from('chat_messages').insert({
         user_id: user.id,
         message_text: newMessage.trim() || null,
@@ -211,7 +222,7 @@ export function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#050810] flex flex-col pt-16">
+    <div className="min-h-screen bg-[#050810] flex flex-col">
       {/* Header */}
       <div className="bg-slate-900 border-b border-white/10 px-4 py-4">
         <div className="max-w-4xl mx-auto flex items-center justify-between">

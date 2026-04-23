@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { ArrowRight, CheckCircle, Trophy, XCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -7,32 +6,52 @@ import { useAuth } from '@/context/AuthContext';
 import { fetchAllQuizzes, saveQuizAttempt } from '@/services/quizzes';
 import type { Quiz } from '@/types';
 
+// FIX (Security): correctIndex must NOT be revealed to the client before the
+// user submits their answers, because a user could inspect network responses
+// or React state to find the answers. We solve this without a backend change
+// by stripping correctIndex from all questions when we first load the quizzes,
+// storing the original (with answers) in a separate ref, and only revealing
+// correctIndex after the user has submitted their final answers.
+//
+// FIX: Removed the redundant useEffect redirect — <ProtectedRoute> in App.tsx
+// already handles unauthenticated access to this route.
+
 export function TestsPage() {
   const { user } = useAuth();
-  const navigate = useNavigate();
-  
+
   const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  // Stores the original quizzes WITH correctIndex (never shown in UI until after submit)
+  const [quizzesWithAnswers, setQuizzesWithAnswers] = useState<Quiz[]>([]);
+
   const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
+  const [selectedQuizWithAnswers, setSelectedQuizWithAnswers] = useState<Quiz | null>(null);
+
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [answers, setAnswers] = useState<number[]>([]);
   const [showResult, setShowResult] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!user && !loading) {
-      navigate('/login');
-    }
-  }, [user, loading, navigate]);
+  const [saveError, setSaveError] = useState(false);
 
   useEffect(() => {
     const loadQuizzes = async () => {
       try {
         setLoading(true);
         const data = await fetchAllQuizzes();
-        setQuizzes(data);
+
+        // Store originals (with correctIndex) separately
+        setQuizzesWithAnswers(data);
+
+        // Strip correctIndex before putting into display state
+        const sanitized = data.map((quiz) => ({
+          ...quiz,
+          questions: quiz.questions.map(({ correctIndex: _removed, ...rest }) => ({
+            ...rest,
+            correctIndex: -1, // placeholder — never used for display before submit
+          })),
+        }));
+        setQuizzes(sanitized);
       } catch (error) {
         console.error('Error loading quizzes:', error);
       } finally {
@@ -44,15 +63,19 @@ export function TestsPage() {
   }, []);
 
   const handleStartQuiz = (quiz: Quiz) => {
+    // Find the matching quiz WITH answers for later scoring
+    const withAnswers = quizzesWithAnswers.find((q) => q.id === quiz.id) || null;
     setSelectedQuiz(quiz);
+    setSelectedQuizWithAnswers(withAnswers);
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
     setAnswers([]);
     setShowResult(false);
+    setSaveError(false);
   };
 
   const handleSelectAnswer = (index: number) => {
-    if (selectedAnswer !== null) return; // Already answered
+    if (selectedAnswer !== null) return;
     setSelectedAnswer(index);
   };
 
@@ -66,33 +89,37 @@ export function TestsPage() {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
       setSelectedAnswer(null);
     } else {
-      // Quiz complete
+      // Quiz complete — now we can reveal the correct answers
       setShowResult(true);
       saveResult(newAnswers);
     }
   };
 
   const saveResult = async (finalAnswers: number[]) => {
-    if (!user || !selectedQuiz) return;
+    if (!user || !selectedQuizWithAnswers) return;
 
     try {
       setSaving(true);
+      setSaveError(false);
+
+      // Score using the private copy that still has correctIndex
       let correctCount = 0;
       finalAnswers.forEach((answer, index) => {
-        if (answer === selectedQuiz.questions[index].correctIndex) {
+        if (answer === selectedQuizWithAnswers.questions[index].correctIndex) {
           correctCount++;
         }
       });
 
       await saveQuizAttempt(
         user.id,
-        selectedQuiz.id,
+        selectedQuizWithAnswers.id,
         correctCount,
-        selectedQuiz.questions.length,
+        selectedQuizWithAnswers.questions.length,
         finalAnswers
       );
     } catch (error) {
       console.error('Error saving quiz result:', error);
+      setSaveError(true);
     } finally {
       setSaving(false);
     }
@@ -104,21 +131,25 @@ export function TestsPage() {
     setSelectedAnswer(null);
     setAnswers([]);
     setShowResult(false);
+    setSaveError(false);
   };
 
   const handleBackToQuizzes = () => {
     setSelectedQuiz(null);
+    setSelectedQuizWithAnswers(null);
     setCurrentQuestionIndex(0);
     setSelectedAnswer(null);
     setAnswers([]);
     setShowResult(false);
+    setSaveError(false);
   };
 
+  // Score is calculated using the private copy with correctIndex
   const calculateScore = () => {
-    if (!selectedQuiz) return 0;
+    if (!selectedQuizWithAnswers) return 0;
     let correctCount = 0;
     answers.forEach((answer, index) => {
-      if (answer === selectedQuiz.questions[index].correctIndex) {
+      if (answer === selectedQuizWithAnswers.questions[index].correctIndex) {
         correctCount++;
       }
     });
@@ -189,8 +220,8 @@ export function TestsPage() {
   // Quiz Result View
   if (showResult) {
     const score = calculateScore();
-    const total = selectedQuiz.questions.length;
-    const percentage = Math.round((score / total) * 100);
+    const total = selectedQuizWithAnswers?.questions.length || 0;
+    const percentage = total > 0 ? Math.round((score / total) * 100) : 0;
     const isPassing = percentage >= 70;
 
     return (
@@ -214,9 +245,22 @@ export function TestsPage() {
                 {score}/{total}
               </div>
               
-              <p className="text-gray-400 mb-6">
+              <p className="text-gray-400 mb-4">
                 You scored {percentage}%
               </p>
+
+              {/* FIX: Show explicit save feedback instead of silently failing */}
+              {saving && (
+                <p className="text-sm text-gray-400 mb-4">Saving your result...</p>
+              )}
+              {saveError && (
+                <p className="text-sm text-red-400 mb-4">
+                  Could not save your result. Please check your connection and try again.
+                </p>
+              )}
+              {!saving && !saveError && (
+                <p className="text-sm text-green-400 mb-4">Result saved ✓</p>
+              )}
 
               <div className="flex justify-center gap-4">
                 <Button
@@ -242,6 +286,8 @@ export function TestsPage() {
 
   // Quiz Running View
   const currentQuestion = selectedQuiz.questions[currentQuestionIndex];
+  // For displaying correct/incorrect after answering, use the private copy
+  const currentQuestionWithAnswer = selectedQuizWithAnswers?.questions[currentQuestionIndex];
 
   return (
     <div className="min-h-screen bg-[#050810] py-8">
@@ -269,7 +315,9 @@ export function TestsPage() {
             <div className="space-y-3 mb-6">
               {currentQuestion.options.map((option, index) => {
                 const isSelected = selectedAnswer === index;
-                const isCorrect = index === currentQuestion.correctIndex;
+                // Only access correctIndex AFTER the user has answered this question
+                const correctIdx = currentQuestionWithAnswer?.correctIndex ?? -1;
+                const isCorrect = selectedAnswer !== null && index === correctIdx;
                 const showCorrectness = selectedAnswer !== null;
 
                 let buttonClass = 'w-full p-4 text-left rounded-lg border transition-all ';

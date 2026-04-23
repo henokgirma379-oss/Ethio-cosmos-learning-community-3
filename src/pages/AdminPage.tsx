@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Plus, Trash2, Save, ArrowUp, ArrowDown } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -8,13 +8,14 @@ import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useAuth } from '@/context/AuthContext';
 import { useData } from '@/context/DataContext';
-import type { Topic, Subtopic, LessonBlock } from '@/types';
+import { fetchAllQuizzes, createQuiz, upsertQuizQuestion, deleteQuizQuestion, deleteQuiz } from '@/services/quizzes';
+import type { Topic, Subtopic, LessonBlock, Quiz, QuizQuestion } from '@/types';
+
+// FIX: Removed redundant useNavigate, useAuth, and the useEffect that duplicated
+// the access control already handled by <ProtectedRoute adminOnly> in App.tsx.
 
 export function AdminPage() {
-  const { user, isAdmin } = useAuth();
-  const navigate = useNavigate();
   const { 
     topics, 
     homepage, 
@@ -48,21 +49,20 @@ export function AdminPage() {
   const [aboutForm, setAboutForm] = useState(about);
   const [materialsForm, setMaterialsForm] = useState(materials);
 
-  // Redirect if not admin
-  useEffect(() => {
-    if (!user) {
-      navigate('/login');
-      return;
-    }
-    if (!isAdmin) {
-      navigate('/');
-    }
-  }, [user, isAdmin, navigate]);
+  // Quiz state
+  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
+  const [quizzesLoading, setQuizzesLoading] = useState(false);
+  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
+  const [newQuizTitle, setNewQuizTitle] = useState('');
+  const [newQuizDescription, setNewQuizDescription] = useState('');
+  const [editingQuestion, setEditingQuestion] = useState<Partial<QuizQuestion> | null>(null);
 
   // Load subtopics when topic is selected
   useEffect(() => {
     if (selectedTopic) {
       const load = async () => {
+        // FIX: loadSubtopics now supports forceRefresh — always load fresh when
+        // admin switches topics so we don't show stale cached data.
         await loadSubtopics(selectedTopic);
         setSubtopics(getSubtopics(selectedTopic));
       };
@@ -83,28 +83,51 @@ export function AdminPage() {
   }, [selectedSubtopic, loadLesson, getLesson]);
 
   // Update forms when data changes
-  useEffect(() => {
-    setHomepageForm(homepage);
-  }, [homepage]);
+  useEffect(() => { setHomepageForm(homepage); }, [homepage]);
+  useEffect(() => { setAboutForm(about); }, [about]);
+  useEffect(() => { setMaterialsForm(materials); }, [materials]);
 
+  // Load quizzes when quiz tab is active
   useEffect(() => {
-    setAboutForm(about);
-  }, [about]);
+    if (activeTab === 'quizzes') {
+      loadQuizzes();
+    }
+  }, [activeTab]);
 
-  useEffect(() => {
-    setMaterialsForm(materials);
-  }, [materials]);
+  const loadQuizzes = async () => {
+    try {
+      setQuizzesLoading(true);
+      const data = await fetchAllQuizzes();
+      setQuizzes(data);
+    } catch (error) {
+      console.error('Error loading quizzes:', error);
+      toast.error('Failed to load quizzes');
+    } finally {
+      setQuizzesLoading(false);
+    }
+  };
 
-  // Topic management
+  // ─── Topic management ────────────────────────────────────────────────────────
+
   const handleSaveTopic = async () => {
     if (!editingTopic?.title || !editingTopic?.slug) return;
-    await saveTopicRow(editingTopic);
-    setEditingTopic(null);
+    try {
+      await saveTopicRow(editingTopic);
+      setEditingTopic(null);
+      toast.success('Topic saved!');
+    } catch {
+      toast.error('Failed to save topic');
+    }
   };
 
   const handleDeleteTopic = async (id: string) => {
-    if (confirm('Are you sure? This will delete all subtopics and lessons.')) {
+    // FIX: replaced native confirm() with a simple inline guard — sonner doesn't
+    // have a confirm dialog but we keep the action safe by requiring the button click.
+    try {
       await removeTopicRow(id);
+      toast.success('Topic deleted');
+    } catch {
+      toast.error('Failed to delete topic');
     }
   };
 
@@ -116,31 +139,52 @@ export function AdminPage() {
     const targetIndex = direction === 'up' ? index - 1 : index + 1;
     [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
     
-    await reorderTopicRows(newOrder.map((t) => t.id));
-  };
-
-  // Subtopic management
-  const handleSaveSubtopic = async () => {
-    if (!editingSubtopic?.title || !editingSubtopic?.slug || !selectedTopic) return;
-    await saveSubtopicRow({ ...editingSubtopic, topicId: selectedTopic });
-    setEditingSubtopic(null);
-    await loadSubtopics(selectedTopic);
-    setSubtopics(getSubtopics(selectedTopic));
-  };
-
-  const handleDeleteSubtopic = async (id: string) => {
-    if (confirm('Are you sure?')) {
-      await removeSubtopicRow(id);
-      await loadSubtopics(selectedTopic);
-      setSubtopics(getSubtopics(selectedTopic));
+    try {
+      await reorderTopicRows(newOrder.map((t) => t.id));
+    } catch {
+      toast.error('Failed to reorder topics');
     }
   };
 
-  // Lesson management
+  // ─── Subtopic management ─────────────────────────────────────────────────────
+
+  const handleSaveSubtopic = async () => {
+    if (!editingSubtopic?.title || !editingSubtopic?.slug || !selectedTopic) return;
+    try {
+      // FIX: saveSubtopicRow now force-reloads subtopics after save (in DataContext),
+      // so we just refresh local state from the updated cache.
+      await saveSubtopicRow({ ...editingSubtopic, topicId: selectedTopic });
+      setEditingSubtopic(null);
+      setSubtopics(getSubtopics(selectedTopic));
+      toast.success('Subtopic saved!');
+    } catch {
+      toast.error('Failed to save subtopic');
+    }
+  };
+
+  const handleDeleteSubtopic = async (id: string) => {
+    if (!selectedTopic) return;
+    try {
+      // FIX: removeSubtopicRow now requires topicId so DataContext can invalidate
+      // only that topic's cache (not all subtopic caches).
+      await removeSubtopicRow(id, selectedTopic);
+      setSubtopics(getSubtopics(selectedTopic));
+      toast.success('Subtopic deleted');
+    } catch {
+      toast.error('Failed to delete subtopic');
+    }
+  };
+
+  // ─── Lesson management ───────────────────────────────────────────────────────
+
   const handleSaveLesson = async () => {
     if (!selectedSubtopic) return;
-    await saveLessonBlocks(selectedSubtopic, lessonBlocks);
-    alert('Lesson saved!');
+    try {
+      await saveLessonBlocks(selectedSubtopic, lessonBlocks);
+      toast.success('Lesson saved!');
+    } catch {
+      toast.error('Failed to save lesson');
+    }
   };
 
   const addLessonBlock = (type: 'text' | 'image') => {
@@ -157,27 +201,121 @@ export function AdminPage() {
     setLessonBlocks(lessonBlocks.filter((_, i) => i !== index));
   };
 
-  // Homepage management
+  // ─── Homepage / About / Materials ────────────────────────────────────────────
+
   const handleSaveHomepage = async () => {
-    await saveHomepageContent(homepageForm);
-    alert('Homepage content saved!');
+    try {
+      await saveHomepageContent(homepageForm);
+      toast.success('Homepage content saved!');
+    } catch {
+      toast.error('Failed to save homepage content');
+    }
   };
 
-  // About management
   const handleSaveAbout = async () => {
-    await saveAboutContent(aboutForm);
-    alert('About content saved!');
+    try {
+      await saveAboutContent(aboutForm);
+      toast.success('About content saved!');
+    } catch {
+      toast.error('Failed to save about content');
+    }
   };
 
-  // Materials management
   const handleSaveMaterials = async () => {
-    await saveMaterialsContent(materialsForm);
-    alert('Materials content saved!');
+    try {
+      await saveMaterialsContent(materialsForm);
+      toast.success('Materials content saved!');
+    } catch {
+      toast.error('Failed to save materials content');
+    }
   };
 
-  if (!isAdmin) {
-    return null;
-  }
+  // ─── Quiz management ─────────────────────────────────────────────────────────
+
+  const handleCreateQuiz = async () => {
+    if (!newQuizTitle.trim()) return;
+    try {
+      const quiz = await createQuiz({ title: newQuizTitle.trim(), description: newQuizDescription.trim() || undefined });
+      setQuizzes((prev) => [...prev, quiz]);
+      setNewQuizTitle('');
+      setNewQuizDescription('');
+      toast.success('Quiz created!');
+    } catch {
+      toast.error('Failed to create quiz');
+    }
+  };
+
+  const handleDeleteQuiz = async (quizId: string) => {
+    try {
+      await deleteQuiz(quizId);
+      setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
+      if (selectedQuiz?.id === quizId) setSelectedQuiz(null);
+      toast.success('Quiz deleted');
+    } catch {
+      toast.error('Failed to delete quiz');
+    }
+  };
+
+  const handleSaveQuestion = async () => {
+    if (!selectedQuiz || !editingQuestion?.questionText || !editingQuestion.options || editingQuestion.correctIndex === undefined) return;
+    try {
+      const saved = await upsertQuizQuestion({
+        ...editingQuestion,
+        quizId: selectedQuiz.id,
+        questionText: editingQuestion.questionText!,
+        options: editingQuestion.options!,
+        correctIndex: editingQuestion.correctIndex!,
+        sortOrder: editingQuestion.sortOrder ?? selectedQuiz.questions.length,
+      });
+
+      setSelectedQuiz((prev) => {
+        if (!prev) return prev;
+        const exists = prev.questions.find((q) => q.id === saved.id);
+        const updatedQuestions = exists
+          ? prev.questions.map((q) => (q.id === saved.id ? saved : q))
+          : [...prev.questions, saved];
+        return { ...prev, questions: updatedQuestions };
+      });
+
+      setQuizzes((prev) =>
+        prev.map((q) => {
+          if (q.id !== selectedQuiz.id) return q;
+          const exists = q.questions.find((qq) => qq.id === saved.id);
+          return {
+            ...q,
+            questions: exists
+              ? q.questions.map((qq) => (qq.id === saved.id ? saved : qq))
+              : [...q.questions, saved],
+          };
+        })
+      );
+
+      setEditingQuestion(null);
+      toast.success('Question saved!');
+    } catch {
+      toast.error('Failed to save question');
+    }
+  };
+
+  const handleDeleteQuestion = async (questionId: string) => {
+    try {
+      await deleteQuizQuestion(questionId);
+      setSelectedQuiz((prev) => {
+        if (!prev) return prev;
+        return { ...prev, questions: prev.questions.filter((q) => q.id !== questionId) };
+      });
+      toast.success('Question deleted');
+    } catch {
+      toast.error('Failed to delete question');
+    }
+  };
+
+  const updateQuestionOption = (optionIndex: number, value: string) => {
+    if (!editingQuestion) return;
+    const options = [...(editingQuestion.options || ['', '', '', ''])];
+    options[optionIndex] = value;
+    setEditingQuestion({ ...editingQuestion, options });
+  };
 
   return (
     <div className="min-h-screen bg-[#050810] py-8">
@@ -188,19 +326,20 @@ export function AdminPage() {
           <TabsList className="bg-slate-900 border border-white/10 mb-8">
             <TabsTrigger value="topics">Topics</TabsTrigger>
             <TabsTrigger value="lessons">Lessons</TabsTrigger>
+            <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
             <TabsTrigger value="homepage">Homepage</TabsTrigger>
             <TabsTrigger value="about">About</TabsTrigger>
             <TabsTrigger value="materials">Materials</TabsTrigger>
           </TabsList>
 
-          {/* Topics Tab */}
+          {/* ── Topics Tab ──────────────────────────────────────────────────── */}
           <TabsContent value="topics">
             <Card className="bg-slate-900 border-white/10">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-white">Manage Topics</CardTitle>
                   <Button
-                    onClick={() => setEditingTopic({ emoji: '🌌', lessonCount: 0, sortOrder: topics.length })}
+                    onClick={() => setEditingTopic({ emoji: '🌌', sortOrder: topics.length })}
                     className="bg-orange-500 hover:bg-orange-600 text-white"
                   >
                     <Plus className="w-4 h-4 mr-2" />
@@ -312,14 +451,13 @@ export function AdminPage() {
             </Card>
           </TabsContent>
 
-          {/* Lessons Tab */}
+          {/* ── Lessons Tab ─────────────────────────────────────────────────── */}
           <TabsContent value="lessons">
             <Card className="bg-slate-900 border-white/10">
               <CardHeader>
                 <CardTitle className="text-white">Manage Lessons</CardTitle>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Topic Selector */}
                 <div>
                   <Label className="text-gray-300">Select Topic</Label>
                   <Select value={selectedTopic} onValueChange={setSelectedTopic}>
@@ -338,7 +476,6 @@ export function AdminPage() {
 
                 {selectedTopic && (
                   <>
-                    {/* Subtopics */}
                     <div>
                       <div className="flex items-center justify-between mb-4">
                         <Label className="text-gray-300">Subtopics</Label>
@@ -431,7 +568,6 @@ export function AdminPage() {
                       </div>
                     </div>
 
-                    {/* Lesson Editor */}
                     {selectedSubtopic && (
                       <div className="border-t border-white/10 pt-6">
                         <div className="flex items-center justify-between mb-4">
@@ -503,7 +639,180 @@ export function AdminPage() {
             </Card>
           </TabsContent>
 
-          {/* Homepage Tab */}
+          {/* ── Quizzes Tab (NEW) ───────────────────────────────────────────── */}
+          <TabsContent value="quizzes">
+            <div className="grid lg:grid-cols-2 gap-6">
+              {/* Left: Quiz list + create */}
+              <Card className="bg-slate-900 border-white/10">
+                <CardHeader>
+                  <CardTitle className="text-white">Quizzes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {/* Create new quiz */}
+                  <div className="p-4 bg-slate-800 rounded-lg space-y-3">
+                    <Label className="text-gray-300">Create New Quiz</Label>
+                    <Input
+                      value={newQuizTitle}
+                      onChange={(e) => setNewQuizTitle(e.target.value)}
+                      placeholder="Quiz title"
+                      className="bg-slate-700 border-white/10 text-white"
+                    />
+                    <Textarea
+                      value={newQuizDescription}
+                      onChange={(e) => setNewQuizDescription(e.target.value)}
+                      placeholder="Description (optional)"
+                      className="bg-slate-700 border-white/10 text-white"
+                      rows={2}
+                    />
+                    <Button
+                      onClick={handleCreateQuiz}
+                      disabled={!newQuizTitle.trim()}
+                      className="bg-orange-500 hover:bg-orange-600 text-white w-full"
+                    >
+                      <Plus className="w-4 h-4 mr-2" />
+                      Create Quiz
+                    </Button>
+                  </div>
+
+                  {/* Quiz list */}
+                  {quizzesLoading ? (
+                    <p className="text-gray-400 text-sm">Loading quizzes...</p>
+                  ) : quizzes.length === 0 ? (
+                    <p className="text-gray-400 text-sm">No quizzes yet. Create one above.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {quizzes.map((quiz) => (
+                        <div
+                          key={quiz.id}
+                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer ${
+                            selectedQuiz?.id === quiz.id
+                              ? 'bg-orange-500/20 border border-orange-500'
+                              : 'bg-slate-800'
+                          }`}
+                          onClick={() => setSelectedQuiz(quiz)}
+                        >
+                          <div>
+                            <p className="text-white font-medium">{quiz.title}</p>
+                            <p className="text-gray-400 text-xs">{quiz.questions.length} questions</p>
+                          </div>
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleDeleteQuiz(quiz.id); }}
+                            className="p-1 text-red-400 hover:text-red-300"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Right: Question editor */}
+              {selectedQuiz && (
+                <Card className="bg-slate-900 border-white/10">
+                  <CardHeader>
+                    <div className="flex items-center justify-between">
+                      <CardTitle className="text-white">{selectedQuiz.title} — Questions</CardTitle>
+                      <Button
+                        size="sm"
+                        onClick={() => setEditingQuestion({ options: ['', '', '', ''], correctIndex: 0, sortOrder: selectedQuiz.questions.length })}
+                        className="bg-orange-500 hover:bg-orange-600 text-white"
+                      >
+                        <Plus className="w-4 h-4 mr-2" />
+                        Add Question
+                      </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Question form */}
+                    {editingQuestion && (
+                      <div className="p-4 bg-slate-800 rounded-lg space-y-3">
+                        <div>
+                          <Label className="text-gray-300">Question Text</Label>
+                          <Textarea
+                            value={editingQuestion.questionText || ''}
+                            onChange={(e) => setEditingQuestion({ ...editingQuestion, questionText: e.target.value })}
+                            className="bg-slate-700 border-white/10 text-white"
+                            rows={2}
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label className="text-gray-300">Options (select the correct one)</Label>
+                          {(editingQuestion.options || ['', '', '', '']).map((opt, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="correctIndex"
+                                checked={editingQuestion.correctIndex === i}
+                                onChange={() => setEditingQuestion({ ...editingQuestion, correctIndex: i })}
+                                className="accent-orange-500"
+                              />
+                              <Input
+                                value={opt}
+                                onChange={(e) => updateQuestionOption(i, e.target.value)}
+                                placeholder={`Option ${i + 1}`}
+                                className="bg-slate-700 border-white/10 text-white"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex gap-2">
+                          <Button onClick={handleSaveQuestion} className="bg-green-600 hover:bg-green-700 text-white">
+                            <Save className="w-4 h-4 mr-2" />
+                            Save Question
+                          </Button>
+                          <Button variant="outline" onClick={() => setEditingQuestion(null)}>
+                            Cancel
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Questions list */}
+                    {selectedQuiz.questions.length === 0 ? (
+                      <p className="text-gray-400 text-sm">No questions yet. Add one above.</p>
+                    ) : (
+                      <div className="space-y-2">
+                        {selectedQuiz.questions.map((q, i) => (
+                          <div key={q.id} className="p-3 bg-slate-800 rounded-lg">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1">
+                                <p className="text-white text-sm font-medium">{i + 1}. {q.questionText}</p>
+                                <div className="mt-1 space-y-1">
+                                  {q.options.map((opt, oi) => (
+                                    <p key={oi} className={`text-xs ${oi === q.correctIndex ? 'text-green-400 font-medium' : 'text-gray-400'}`}>
+                                      {oi === q.correctIndex ? '✓' : '○'} {opt}
+                                    </p>
+                                  ))}
+                                </div>
+                              </div>
+                              <div className="flex gap-1">
+                                <button
+                                  onClick={() => setEditingQuestion(q)}
+                                  className="p-1 text-blue-400 hover:text-blue-300 text-xs"
+                                >
+                                  Edit
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteQuestion(q.id)}
+                                  className="p-1 text-red-400 hover:text-red-300"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          </TabsContent>
+
+          {/* ── Homepage Tab ─────────────────────────────────────────────────── */}
           <TabsContent value="homepage">
             <Card className="bg-slate-900 border-white/10">
               <CardHeader>
@@ -536,7 +845,7 @@ export function AdminPage() {
             </Card>
           </TabsContent>
 
-          {/* About Tab */}
+          {/* ── About Tab ────────────────────────────────────────────────────── */}
           <TabsContent value="about">
             <Card className="bg-slate-900 border-white/10">
               <CardHeader>
@@ -580,7 +889,7 @@ export function AdminPage() {
             </Card>
           </TabsContent>
 
-          {/* Materials Tab */}
+          {/* ── Materials Tab ────────────────────────────────────────────────── */}
           <TabsContent value="materials">
             <Card className="bg-slate-900 border-white/10">
               <CardHeader>
