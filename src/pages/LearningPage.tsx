@@ -6,7 +6,7 @@ import { useData } from '@/context/DataContext';
 import { FallbackImage } from '@/components/MediaFallback';
 
 export function LearningPage() {
-  const { topics, dataLoading } = useData();
+  const { topics, dataLoading, dataError } = useData();
 
   if (dataLoading) {
     return (
@@ -55,7 +55,13 @@ export function LearningPage() {
       {/* Topics Grid */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {topics.length === 0 ? (
+          {dataError ? (
+            /* BUG 2 FIX: surface load errors instead of silently showing an empty state */
+            <div className="text-center py-16 bg-red-500/10 border border-red-500/20 rounded-xl">
+              <p className="text-red-400 font-semibold mb-2">Could not load topics</p>
+              <p className="text-gray-400 text-sm">{dataError}</p>
+            </div>
+          ) : topics.length === 0 ? (
             <div className="text-center py-16">
               <p className="text-gray-400">No topics available yet. Check back soon!</p>
             </div>

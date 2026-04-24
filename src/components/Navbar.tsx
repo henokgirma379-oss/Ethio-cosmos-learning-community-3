@@ -6,6 +6,10 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
 export function Navbar() {
+  // BUG 8 FIX: isAdmin MUST come directly from AuthContext — do NOT recompute it
+  // here with useMemo/profile?.role, because the profile loads async after first
+  // render and a local useMemo would cache `false` and never update, hiding the
+  // admin link permanently.
   const { user, profile, isAdmin, logout } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();

@@ -15,7 +15,9 @@ import type {
 interface DataContextType {
   // Loading state
   dataLoading: boolean;
-  
+  // BUG 2 FIX: surface errors so the UI can show an actionable message
+  dataError: string | null;
+
   // Content
   homepage: HomepageContent;
   about: AboutContent;
@@ -45,6 +47,8 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
   const [dataLoading, setDataLoading] = useState(true);
+  // BUG 2 FIX: surface errors (e.g. RLS blocking a read) so the UI can show them
+  const [dataError, setDataError] = useState<string | null>(null);
   const [topics, setTopics] = useState<Topic[]>([]);
   const [homepage, setHomepage] = useState<HomepageContent>({
     heroTitle: 'Explore the Cosmos',
@@ -75,7 +79,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     const loadInitialData = async () => {
       try {
         setDataLoading(true);
-        
+        setDataError(null);
+
         const [topicsData, homepageData, aboutData, materialsData] = await Promise.all([
           fetchTopics(),
           fetchHomepage(),
@@ -88,7 +93,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setAbout(aboutData);
         setMaterials(materialsData);
       } catch (error) {
+        // BUG 2 FIX: capture a human-readable error message so the UI can surface it
+        const message = error instanceof Error ? error.message : 'Failed to load content';
         console.error('Error loading initial data:', error);
+        setDataError(message);
       } finally {
         setDataLoading(false);
       }
@@ -207,6 +215,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   const value: DataContextType = {
     dataLoading,
+    dataError,
     homepage,
     about,
     materials,
