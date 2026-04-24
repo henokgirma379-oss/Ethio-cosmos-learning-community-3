@@ -32,7 +32,9 @@ export function ChatPage() {
     profilesRef.current = profiles;
   }, [profiles]);
 
-  // Load initial messages
+  // BUG 1 FIX: Load messages and resolve profiles BEFORE setting state so the
+  // UI never renders raw UUIDs. We batch-fetch profiles in a single query,
+  // then map each chat message to include username + avatar in one shot.
   useEffect(() => {
     const loadMessages = async () => {
       try {
@@ -44,34 +46,28 @@ export function ChatPage() {
 
         if (error) throw error;
 
-        const loadedMessages = (data || []).map((msg) => ({
-          id: msg.id,
-          userId: msg.user_id,
-          username: msg.user_id.slice(0, 8),
-          avatarUrl: null,
-          text: msg.message_text,
-          imageUrl: msg.image_url,
-          timestamp: msg.created_at,
-        })) as ChatMessage[];
+        const rawMessages = data || [];
 
-        setMessages(loadedMessages);
-
-        // Fetch profiles for all users in the initial batch
-        const userIds = [...new Set(loadedMessages.map((m) => m.userId))];
+        // Batch-fetch all profiles for the users in this message batch
+        const userIds = [...new Set(rawMessages.map((m) => m.user_id))];
         const profileMap = await fetchProfilesBatch(userIds);
         setProfiles(profileMap);
 
-        // Update messages with real usernames
-        setMessages((prev) =>
-          prev.map((msg) => {
-            const profile = profileMap.get(msg.userId);
-            return {
-              ...msg,
-              username: profile?.username || msg.username,
-              avatarUrl: profile?.avatarUrl || null,
-            };
-          })
-        );
+        // Build the final message list with usernames resolved — never expose UUIDs
+        const loadedMessages: ChatMessage[] = rawMessages.map((msg) => {
+          const profile = profileMap.get(msg.user_id);
+          return {
+            id: msg.id,
+            userId: msg.user_id,
+            username: profile?.username || 'Anonymous',
+            avatarUrl: profile?.avatarUrl || null,
+            text: msg.message_text,
+            imageUrl: msg.image_url,
+            timestamp: msg.created_at,
+          };
+        });
+
+        setMessages(loadedMessages);
       } catch (error) {
         console.error('Error loading messages:', error);
       } finally {
@@ -119,10 +115,11 @@ export function ChatPage() {
             }
           }
 
+          // BUG 1 FIX: Fall back to 'Anonymous' rather than exposing a UUID slice
           const chatMessage: ChatMessage = {
             id: newMsg.id,
             userId: newMsg.user_id,
-            username: profile?.username || newMsg.user_id.slice(0, 8),
+            username: profile?.username || 'Anonymous',
             avatarUrl: profile?.avatarUrl || null,
             text: newMsg.message_text,
             imageUrl: newMsg.image_url,

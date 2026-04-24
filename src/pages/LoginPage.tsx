@@ -47,7 +47,15 @@ export function LoginPage() {
       }
     } catch (err: unknown) {
       const errorMessage = err instanceof Error ? err.message : 'An error occurred';
-      setError(errorMessage);
+      // BUG 9 FIX: translate the opaque "Email not confirmed" Supabase error into
+      // a friendly, actionable message so new users know what to do.
+      if (errorMessage.toLowerCase().includes('email not confirmed')) {
+        setError('Please confirm your email before logging in. Check your inbox for the confirmation link.');
+      } else if (errorMessage.toLowerCase().includes('invalid login credentials')) {
+        setError('Invalid email or password. Please try again.');
+      } else {
+        setError(errorMessage);
+      }
     } finally {
       setLoading(false);
     }

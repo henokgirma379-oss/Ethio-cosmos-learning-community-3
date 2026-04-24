@@ -123,6 +123,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return { needsConfirmation: !session };
   };
 
+  // BUG 7 FIX: Do NOT touch localStorage for app data. Supabase manages its own
+  // session storage internally — removing a hand-picked key is both unnecessary
+  // and can corrupt the library's internal state. We only clear our own
+  // in-memory React state here.
   const logout = async () => {
     try {
       await supabase.auth.signOut();
@@ -132,8 +136,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Always clear local state even if signOut fails
       setUser(null);
       setProfile(null);
-      // Clear any potential stale data in localStorage
-      localStorage.removeItem("supabase.auth.token");
     }
   };
   const refreshProfile = async () => {

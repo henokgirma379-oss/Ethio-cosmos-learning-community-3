@@ -128,6 +128,8 @@ export function LessonPage() {
     }
   };
 
+  // BUG 3 FIX: use an idempotent upsert (already implemented in markLessonComplete)
+  // and surface errors to the user with a toast rather than failing silently.
   const handleMarkComplete = async () => {
     if (!user || !currentSubtopic) return;
 
@@ -137,6 +139,7 @@ export function LessonPage() {
       showToast('Lesson marked complete!');
     } catch (error) {
       console.error('Error marking lesson complete:', error);
+      showToast('Could not save progress');
     }
   };
 
@@ -211,15 +214,26 @@ export function LessonPage() {
               <h1 className="text-3xl font-bold text-white">{currentSubtopic.title}</h1>
             </div>
             {user && (
+              /* BUG 5 FIX: explicit, accessible bookmark toggle button with visible label */
               <button
                 onClick={handleBookmark}
-                className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
+                  isBookmarked
+                    ? 'bg-amber-500 text-white border-amber-500'
+                    : 'bg-transparent text-amber-400 border-amber-400 hover:bg-amber-400 hover:text-white'
+                }`}
                 aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
               >
                 {isBookmarked ? (
-                  <BookmarkCheck className="w-6 h-6 text-orange-500" />
+                  <>
+                    <BookmarkCheck className="w-5 h-5" />
+                    <span className="text-sm font-medium">Bookmarked</span>
+                  </>
                 ) : (
-                  <Bookmark className="w-6 h-6 text-gray-400 hover:text-orange-500" />
+                  <>
+                    <Bookmark className="w-5 h-5" />
+                    <span className="text-sm font-medium">Bookmark</span>
+                  </>
                 )}
               </button>
             )}

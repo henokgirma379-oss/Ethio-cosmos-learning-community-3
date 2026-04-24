@@ -23,3 +23,6 @@ Thumbs.db
 # Build caches
 .vite/
 *.tsbuildinfo
+
+# Build output (generated on deploy)
+dist/
