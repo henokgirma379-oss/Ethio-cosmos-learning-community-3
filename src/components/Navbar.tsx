@@ -26,9 +26,15 @@ export function Navbar() {
   }, []);
 
   const handleLogout = async () => {
-    await logout();
-    navigate('/');
-    setProfileDropdownOpen(false);
+    try {
+      setProfileDropdownOpen(false);
+      await logout();
+      navigate("/", { replace: true });
+    } catch (error) {
+      console.error("Logout failed:", error);
+      // Force navigation even on error
+      navigate("/", { replace: true });
+    }
   };
 
   const isActive = (path: string) => {
