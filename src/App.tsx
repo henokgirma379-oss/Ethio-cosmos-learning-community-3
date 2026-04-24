@@ -27,7 +27,9 @@ interface ProtectedRouteProps {
 function ProtectedRoute({ children, adminOnly = false }: ProtectedRouteProps) {
   const { user, isAdmin, loading } = useAuth();
 
-  if (loading) {
+  // Allow access immediately after authentication succeeds (user is set)
+  // Only wait for loading during initial session check on app mount
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-[#050810] flex items-center justify-center">
         <div className="text-center">
@@ -58,7 +60,8 @@ interface PublicRouteProps {
 function PublicRoute({ children, redirectIfAuthenticated = false }: PublicRouteProps) {
   const { user, loading } = useAuth();
 
-  if (loading) {
+  // Only show loading during initial session check on app mount
+  if (loading && !user) {
     return (
       <div className="min-h-screen bg-[#050810] flex items-center justify-center">
         <div className="text-center">

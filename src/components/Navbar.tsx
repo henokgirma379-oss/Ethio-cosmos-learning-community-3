@@ -105,7 +105,7 @@ export function Navbar() {
                     {profile?.avatarUrl ? (
                       <img
                         src={profile.avatarUrl}
-                        alt={profile.username}
+                        alt={profile.username || 'User'}
                         className="w-8 h-8 rounded-full object-cover"
                       />
                     ) : (
@@ -114,7 +114,7 @@ export function Navbar() {
                       </div>
                     )}
                     <span className="text-gray-300 text-sm hidden sm:block">
-                      {profile?.username}
+                      {profile?.username || 'User'}
                     </span>
                     <ChevronDown className="w-4 h-4 text-gray-400" />
                   </button>
@@ -123,8 +123,8 @@ export function Navbar() {
                   {profileDropdownOpen && (
                     <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-lg shadow-xl py-2">
                       <div className="px-4 py-2 border-b border-white/10">
-                        <p className="text-white font-medium">{profile?.username}</p>
-                        <p className="text-gray-400 text-sm">{profile?.email}</p>
+                        <p className="text-white font-medium">{profile?.username || 'User'}</p>
+                        <p className="text-gray-400 text-sm">{profile?.email || user?.email || 'Loading...'}</p>
                       </div>
                       
                       <Link

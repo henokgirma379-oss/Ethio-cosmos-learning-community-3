@@ -35,6 +35,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Load profile asynchronously without blocking auth state
+  const loadProfileAsync = useCallback((userId: string) => {
+    loadProfile(userId).catch(error => {
+      console.error('Error loading profile asynchronously:', error);
+    });
+  }, [loadProfile]);
+
   useEffect(() => {
     // Check for existing session on mount
     const checkSession = async () => {
@@ -43,7 +50,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         if (session?.user) {
           setUser(session.user);
-          await loadProfile(session.user.id);
+          // Load profile asynchronously in the background
+          loadProfileAsync(session.user.id);
         }
       } catch (error) {
         console.error('Error checking session:', error);
@@ -59,7 +67,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       async (event, session) => {
         if (event === 'SIGNED_IN' && session?.user) {
           setUser(session.user);
-          await loadProfile(session.user.id);
+          // Load profile asynchronously in the background without blocking
+          loadProfileAsync(session.user.id);
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
@@ -72,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       subscription.unsubscribe();
     };
-  }, [loadProfile]);
+  }, [loadProfileAsync]);
 
   const signInWithGoogle = async () => {
     // Use production URL if available, otherwise fall back to current origin
@@ -88,10 +97,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error signing in with Google:', error);
       throw error;
     }
+
+    // Note: Profile will be loaded automatically by onAuthStateChange listener
+    // when the OAuth callback redirects back to the app
   };
 
   const signInWithEmail = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
+    const { error, data } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
@@ -100,12 +112,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       console.error('Error signing in with email:', error);
       throw error;
     }
+
+    // Load profile asynchronously after successful sign-in
+    if (data?.user) {
+      loadProfileAsync(data.user.id);
+    }
   };
 
   const signUpWithEmail = async (email: string, password: string) => {
     // Use production URL if available, otherwise fall back to current origin
     const redirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
-    const { error } = await supabase.auth.signUp({
+    const { error, data } = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -116,6 +133,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) {
       console.error('Error signing up with email:', error);
       throw error;
+    }
+
+    // Load profile asynchronously if user is immediately authenticated (no confirmation required)
+    if (data?.user && data?.session) {
+      loadProfileAsync(data.user.id);
     }
 
     // Check if email confirmation is required
