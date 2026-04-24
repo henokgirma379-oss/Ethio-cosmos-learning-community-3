@@ -93,10 +93,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setAbout(aboutData);
         setMaterials(materialsData);
       } catch (error) {
-        // BUG 2 FIX: capture a human-readable error message so the UI can surface it
         const message = error instanceof Error ? error.message : 'Failed to load content';
         console.error('Error loading initial data:', error);
         setDataError(message);
+        setDataLoading(false);
       } finally {
         setDataLoading(false);
       }

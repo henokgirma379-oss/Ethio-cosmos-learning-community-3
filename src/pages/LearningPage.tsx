@@ -14,6 +14,7 @@ export function LearningPage() {
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-400">Loading topics...</p>
+          <p className="text-gray-500 text-sm mt-2">Please wait while we fetch the latest content.</p>
         </div>
       </div>
     );
@@ -56,10 +57,10 @@ export function LearningPage() {
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {dataError ? (
-            /* BUG 2 FIX: surface load errors instead of silently showing an empty state */
             <div className="text-center py-16 bg-red-500/10 border border-red-500/20 rounded-xl">
               <p className="text-red-400 font-semibold mb-2">Could not load topics</p>
-              <p className="text-gray-400 text-sm">{dataError}</p>
+              <p className="text-gray-400 text-sm mb-4">{dataError}</p>
+              <p className="text-gray-500 text-xs">Please try refreshing the page or contact support if the problem persists.</p>
             </div>
           ) : topics.length === 0 ? (
             <div className="text-center py-16">

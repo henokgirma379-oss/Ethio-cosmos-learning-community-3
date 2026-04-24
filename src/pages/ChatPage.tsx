@@ -38,11 +38,18 @@ export function ChatPage() {
   useEffect(() => {
     const loadMessages = async () => {
       try {
+        const timeoutId = setTimeout(() => {
+          console.warn('Chat loading timed out');
+          setLoading(false);
+        }, 10000);
+
         const { data, error } = await supabase
           .from('chat_messages')
           .select('*')
           .order('created_at', { ascending: true })
           .limit(200);
+
+        clearTimeout(timeoutId);
 
         if (error) throw error;
 
@@ -70,6 +77,7 @@ export function ChatPage() {
         setMessages(loadedMessages);
       } catch (error) {
         console.error('Error loading messages:', error);
+        setLoading(false);
       } finally {
         setLoading(false);
       }
@@ -213,6 +221,7 @@ export function ChatPage() {
         <div className="text-center">
           <div className="w-12 h-12 border-4 border-orange-500 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
           <p className="text-gray-400">Loading chat...</p>
+          <p className="text-gray-500 text-sm mt-2">This may take a moment...</p>
         </div>
       </div>
     );
@@ -239,7 +248,8 @@ export function ChatPage() {
         <div className="max-w-4xl mx-auto space-y-4">
           {messages.length === 0 ? (
             <div className="text-center py-12">
-              <p className="text-gray-400">No messages yet. Be the first to say hello!</p>
+              <p className="text-gray-400 mb-2">No messages yet. Be the first to say hello!</p>
+              <p className="text-gray-500 text-sm">Messages will appear here as the community shares thoughts.</p>
             </div>
           ) : (
             messages.map((message) => {

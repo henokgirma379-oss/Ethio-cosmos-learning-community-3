@@ -18,14 +18,14 @@ export function HomePage() {
     <div className="min-h-screen bg-[#050810]">
       {/* Hero Section */}
       <section 
-        className="relative min-h-screen flex items-center"
+        className="relative h-screen flex items-center"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(10, 14, 26, 0.7), rgba(5, 8, 16, 0.9)), url(/images/hero-bg.jpg)`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}
       >
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-32">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="max-w-2xl">
             <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
               {homepage.heroTitle}
@@ -64,7 +64,7 @@ export function HomePage() {
       </section>
 
       {/* Feature Cards */}
-      <section id="feature-cards" className="relative -mt-32 z-10 pb-20">
+      <section id="feature-cards" className="relative z-10 pb-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid md:grid-cols-3 gap-6">
             {homepage.featureCards.map((card, index) => (
@@ -86,7 +86,7 @@ export function HomePage() {
       </section>
 
       {/* Featured Topics */}
-      <section className="py-20 bg-[#050810]">
+      <section className="py-16 bg-[#050810]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-12">
             <h2 className="text-3xl md:text-4xl font-bold text-white mb-4">
@@ -139,7 +139,7 @@ export function HomePage() {
       </section>
 
       {/* Stats Section */}
-      <section className="py-20 bg-slate-900/50">
+      <section className="py-16 bg-slate-900/50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8">
             <div className="text-center">
