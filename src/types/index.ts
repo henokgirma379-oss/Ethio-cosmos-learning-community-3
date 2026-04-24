@@ -1,157 +1,68 @@
-// ============================================
-// DB Types (snake_case - match Supabase exactly)
-// ============================================
-
-export interface DbProfile {
-  id: string;
-  username: string;
-  email: string;
-  avatar_url: string | null;
-  role: 'user' | 'admin';
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DbTopic {
-  id: string;
-  slug: string;
+export interface Topic {
+  id: string; // Changed to UUID
   emoji: string;
   title: string;
-  description: string | null;
-  lesson_count: number;
-  image_url: string | null;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
+  description: string;
+  image_url: string; // Changed from image to image_url
+  order_index: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface DbSubtopic {
-  id: string;
-  topic_id: string;
-  slug: string;
+export interface Subtopic {
+  id: string; // Changed to UUID
+  topic_id: string; // Changed to UUID
   emoji: string;
   title: string;
-  description: string | null;
-  sort_order: number;
-  created_at: string;
-  updated_at: string;
+  description: string;
+  order_index: number;
+  created_at?: string;
+  updated_at?: string;
 }
-
-export interface DbLesson {
-  id: string;
-  subtopic_id: string;
-  blocks: LessonBlock[];
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DbChatMessage {
-  id: string;
-  user_id: string;
-  message_text: string | null;
-  image_url: string | null;
-  created_at: string;
-}
-
-export interface DbBookmark {
-  id: string;
-  user_id: string;
-  item_type: 'topic' | 'subtopic';
-  item_id: string;
-  title: string;
-  description: string | null;
-  url: string;
-  created_at: string;
-}
-
-export interface DbUserProgress {
-  id: string;
-  user_id: string;
-  subtopic_id: string;
-  completed_at: string;
-}
-
-export interface DbQuiz {
-  id: string;
-  topic_id: string | null;
-  subtopic_id: string | null;
-  title: string;
-  description: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface DbQuizQuestion {
-  id: string;
-  quiz_id: string;
-  question_text: string;
-  options: string[];
-  correct_index: number;
-  sort_order: number;
-  created_at: string;
-}
-
-export interface DbQuizAttempt {
-  id: string;
-  user_id: string;
-  quiz_id: string;
-  score: number;
-  total: number;
-  answers: number[];
-  completed_at: string;
-}
-
-export interface DbSiteContent {
-  key: string;
-  content: Record<string, unknown>;
-  updated_at: string;
-}
-
-export interface DbAdminLog {
-  id: string;
-  admin_id: string;
-  action: string;
-  target_table: string;
-  target_id: string | null;
-  metadata: Record<string, unknown> | null;
-  created_at: string;
-}
-
-// ============================================
-// UI / Frontend Types (camelCase)
-// ============================================
 
 export interface LessonBlock {
   type: 'text' | 'image';
   content: string;
 }
 
+export interface Lesson {
+  id: string; // Changed to UUID
+  subtopic_id: string; // Changed to UUID
+  title: string; // Added title
+  content_blocks: LessonBlock[];
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface ChatMessage {
   id: string;
-  userId: string;
-  username: string;
-  avatarUrl: string | null;
-  text: string | null;
-  imageUrl: string | null;
-  timestamp: string;
+  user_id: string;
+  message_text?: string | null;
+  image_url?: string | null;
+  created_at: string;
+  // Optional joined fields (filled client-side from profiles)
+  sender_name?: string;
+  sender_email?: string;
 }
 
 export interface UserProfile {
   id: string;
-  username: string;
-  email: string;
-  avatarUrl: string | null;
+  username: string | null;
+  email: string | null;
   role: 'user' | 'admin';
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface TopicProgress {
-  topicId: string;
-  topicSlug: string;
-  topicName: string;
-  completedLessons: number;
-  totalLessons: number;
-  completedSubtopicIds: string[];
+export interface FeaturedTopic {
+  id: string;
+  title: string;
+  description: string;
+  image_url: string;
 }
+
+// Backwards-compat helper for legacy seed data that may still use `image`
+export type FeaturedTopicRaw = FeaturedTopic & { image?: string };
 
 export interface FeatureCard {
   icon: string;
@@ -159,125 +70,86 @@ export interface FeatureCard {
   description: string;
 }
 
-export interface FeaturedTopic {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-}
-
-export interface HomepageContent {
-  heroTitle: string;
-  heroSubtitle: string;
-  featureCards: FeatureCard[];
-  featuredTopics: FeaturedTopic[];
-}
-
-export interface AboutContent {
-  missionText: string;
-  whoWeAreText1: string;
-  whoWeAreText2: string;
-  missionImage: string;
-  whoWeAreImage1: string;
-  whoWeAreImage2: string;
-}
-
 export interface GalleryImage {
   id: string;
   url: string;
-  caption: string;
+  title: string;
 }
 
 export interface VideoItem {
   id: string;
-  title: string;
-  thumbnail: string;
   url: string;
+  thumbnail: string;
+  title: string;
 }
 
 export interface PdfItem {
   id: string;
+  url: string;
   title: string;
   label: string;
-  url: string;
 }
 
-export interface MaterialsContent {
-  galleryImages: GalleryImage[];
-  videos: VideoItem[];
-  pdfs: PdfItem[];
-}
-
-export interface Topic {
-  id: string;
-  slug: string;
-  emoji: string;
-  title: string;
-  description: string | null;
-  lessonCount: number;
-  imageUrl: string | null;
-  sortOrder: number;
-}
-
-export interface Subtopic {
-  id: string;
-  topicId: string;
-  slug: string;
-  emoji: string;
-  title: string;
-  description: string | null;
-  sortOrder: number;
-}
-
-export interface Lesson {
-  id: string;
-  subtopicId: string;
-  blocks: LessonBlock[];
-}
-
+// New types for Quizzes
 export interface Quiz {
   id: string;
-  topicId: string | null;
-  subtopicId: string | null;
   title: string;
-  description: string | null;
-  questions: QuizQuestion[];
+  description?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface QuizQuestion {
   id: string;
-  quizId: string;
-  questionText: string;
+  quiz_id: string;
+  question_text: string;
   options: string[];
-  correctIndex: number;
-  sortOrder: number;
+  correct_answer: number;
+  explanation?: string;
+  order_index: number;
+  created_at?: string;
+  updated_at?: string;
 }
 
-export interface QuizAttempt {
+// New types for User Progress
+export interface UserProgress {
   id: string;
-  userId: string;
-  quizId: string;
-  score: number;
-  total: number;
-  answers: number[];
-  completedAt: string;
+  user_id: string;
+  subtopic_id: string;
+  completed_at?: string;
 }
 
+// New types for Bookmarks
 export interface Bookmark {
   id: string;
-  userId: string;
-  itemType: 'topic' | 'subtopic';
-  itemId: string;
+  user_id: string;
   title: string;
-  description: string | null;
   url: string;
-  createdAt: string;
+  type: string;
+  created_at?: string;
 }
 
-export interface Achievement {
-  id: string;
-  name: string;
-  description: string;
-  icon: string;
-  threshold: number;
+// Site Content types for site_content table
+export type SiteContentKey = 
+  | 'homepage_hero'
+  | 'homepage_feature_cards'
+  | 'homepage_featured_topics'
+  | 'about_content'
+  | 'materials_gallery_images'
+  | 'materials_videos'
+  | 'materials_pdfs';
+
+export type SiteContentValue = 
+  | { heroTitle: string; heroSubtitle: string }
+  | FeatureCard[]
+  | FeaturedTopic[]
+  | { missionText: string; whoWeAreText1: string; whoWeAreText2: string; missionImage: string; whoWeAreImage1: string; whoWeAreImage2: string }
+  | GalleryImage[]
+  | VideoItem[]
+  | PdfItem[];
+
+export interface SiteContent {
+  key: SiteContentKey;
+  value: SiteContentValue;
+  updated_at?: string;
 }

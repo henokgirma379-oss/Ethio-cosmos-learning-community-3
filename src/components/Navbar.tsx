@@ -1,43 +1,49 @@
 import { useState, useRef, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X, User, Bookmark, BarChart3, LogOut, ChevronDown, MessageCircle, TestTube, Home, GraduationCap, Image, Info } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { Button } from '@/components/ui/button';
-import { cn } from '@/lib/utils';
+import { Menu, X, LogOut, BookOpen, BarChart3, Settings } from 'lucide-react';
 
-export function Navbar() {
-  // BUG 8 FIX: isAdmin MUST come directly from AuthContext — do NOT recompute it
-  // here with useMemo/profile?.role, because the profile loads async after first
-  // render and a local useMemo would cache `false` and never update, hiding the
-  // admin link permanently.
-  const { user, profile, isAdmin, logout } = useAuth();
+const publicNavLinks = [
+  { path: '/', label: 'Home' },
+  { path: '/learning', label: 'Learning' },
+  { path: '/materials', label: 'Materials' },
+  { path: '/about', label: 'About' },
+];
+
+const privateNavLinks = [
+  { path: '/chat', label: 'Chat' },
+  { path: '/tests', label: 'Tests' },
+  { path: '/bookmarks', label: 'Bookmarks' },
+  { path: '/progress', label: 'Progress' },
+];
+
+export default function Navbar() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, isAdmin, logout, displayName } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [profileDropdownOpen, setProfileDropdownOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const [profileMenuOpen, setProfileMenuOpen] = useState(false);
+  const profileMenuRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown when clicking outside
+  // Close profile menu when clicking outside
   useEffect(() => {
-    function handleClickOutside(event: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
-        setProfileDropdownOpen(false);
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
       }
-    }
-
+    };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
   const handleLogout = async () => {
     try {
-      setProfileDropdownOpen(false);
       await logout();
-      navigate("/", { replace: true });
+      setProfileMenuOpen(false);
+      navigate('/login');
     } catch (error) {
-      console.error("Logout failed:", error);
-      // Force navigation even on error
-      navigate("/", { replace: true });
+      console.error('Logout error:', error);
     }
   };
 
@@ -48,225 +54,261 @@ export function Navbar() {
     return location.pathname.startsWith(path);
   };
 
-  const publicLinks = [
-    { to: '/', label: 'Home', icon: Home },
-    { to: '/learning', label: 'Learning', icon: GraduationCap },
-    { to: '/materials', label: 'Materials', icon: Image },
-    { to: '/about', label: 'About', icon: Info },
-  ];
+  // Helper to safely access user metadata (avatar_url only - everything else
+  // comes from the `displayName` helper which is ready INSTANTLY on login).
+  const metadata = user?.user_metadata as
+    | { avatar_url?: string; full_name?: string; name?: string }
+    | undefined;
 
-  const authLinks = [
-    { to: '/chat', label: 'Chat', icon: MessageCircle },
-    { to: '/tests', label: 'Tests', icon: TestTube },
-    { to: '/progress', label: 'Progress', icon: BarChart3 },
-    { to: '/bookmarks', label: 'Bookmarks', icon: Bookmark },
-  ];
+  // First letter for avatar fallback, shown as soon as the user state exists.
+  const avatarLetter = (displayName || 'U').trim().charAt(0).toUpperCase();
 
   return (
-    <nav className="fixed top-0 left-0 right-0 z-50">
-      {/* Bar 1 - Main Navigation */}
+    <nav className="fixed top-0 left-0 right-0 z-50 flex flex-col">
+      {/* Top Main Navbar */}
       <div className="bg-slate-950/80 backdrop-blur-md border-b border-white/10">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2">
-              <span className="text-2xl">🌌</span>
-              <span className="text-white font-bold text-lg hidden sm:block">
-                Ethio-Cosmos
+              <span className="text-2xl">🔭</span>
+              <span className="font-bold text-white text-sm sm:text-base hidden sm:inline">
+                Ethio-cosmos-learning-community
+              </span>
+              <span className="font-bold text-white text-sm sm:hidden">
+                Ethio-cosmos
               </span>
             </Link>
 
-            {/* Desktop Navigation */}
-            <div className="hidden md:flex items-center gap-1">
-              {publicLinks.map((link) => (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={cn(
-                    'px-3 py-2 rounded-md text-sm font-medium transition-colors',
-                    isActive(link.to)
-                      ? 'text-orange-500'
-                      : 'text-gray-300 hover:text-white hover:bg-white/5'
-                  )}
-                >
-                  {link.label}
-                </Link>
-              ))}
-            </div>
+	            {/* Desktop Navigation (Main) */}
+	            <div className="hidden lg:flex items-center gap-1">
+	              {publicNavLinks.map((link) => (
+	                <Link
+	                  key={link.path}
+	                  to={link.path}
+	                  className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+	                    isActive(link.path)
+	                      ? 'text-orange-500 bg-orange-500/10'
+	                      : 'text-gray-300 hover:text-white hover:bg-white/5'
+	                  }`}
+	                >
+	                  {link.label}
+	                </Link>
+	              ))}
+	              {user && (
+	                <>
+	                  {privateNavLinks.map((link) => (
+	                    <Link
+	                      key={link.path}
+	                      to={link.path}
+	                      className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+	                        isActive(link.path)
+	                          ? 'text-orange-500 bg-orange-500/10'
+	                          : 'text-gray-300 hover:text-white hover:bg-white/5'
+	                      }`}
+	                    >
+	                      {link.label}
+	                    </Link>
+	                  ))}
+	                  {isAdmin && (
+	                    <Link
+	                      to="/admin"
+	                      className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+	                        isActive('/admin')
+	                          ? 'text-orange-500 bg-orange-500/10'
+	                          : 'text-gray-300 hover:text-white hover:bg-white/5'
+	                      }`}
+	                    >
+	                      Admin
+	                    </Link>
+	                  )}
+	                </>
+	              )}
+	            </div>
 
-            {/* User Actions */}
-            <div className="flex items-center gap-2">
-              {user ? (
-                <div className="relative" ref={dropdownRef}>
-                  <button
-                    onClick={() => setProfileDropdownOpen(!profileDropdownOpen)}
-                    className="flex items-center gap-2 px-3 py-2 rounded-md hover:bg-white/5 transition-colors"
-                  >
-                    {profile?.avatarUrl ? (
-                      <img
-                        src={profile.avatarUrl}
-                        alt={profile.username || 'User'}
-                        className="w-8 h-8 rounded-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-orange-500 flex items-center justify-center text-white font-medium">
-                        {profile?.username?.charAt(0).toUpperCase() || 'U'}
-                      </div>
-                    )}
-                    <span className="text-gray-300 text-sm hidden sm:block">
-                      {profile?.username || 'User'}
-                    </span>
-                    <ChevronDown className="w-4 h-4 text-gray-400" />
-                  </button>
+	            {/* Right side - User Profile / Login */}
+	            <div className="flex items-center gap-2">
+	              {user ? (
+	                <div className="relative" ref={profileMenuRef}>
+	                  <button
+	                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+	                    className="flex items-center gap-2 p-1 rounded-full border border-white/10 hover:bg-white/5 transition-colors"
+	                  >
+	                    {metadata?.avatar_url ? (
+	                      <img 
+	                        src={metadata.avatar_url} 
+	                        alt="Profile" 
+	                        className="w-8 h-8 rounded-full border border-orange-500/50" 
+	                      />
+	                    ) : (
+	                      <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500 font-semibold text-sm">
+	                        {avatarLetter}
+	                      </div>
+	                    )}
+	                    <span className="text-gray-300 text-sm hidden md:inline max-w-[120px] truncate">
+	                      {displayName}
+	                    </span>
+	                  </button>
+	
+	                  {/* Profile Dropdown */}
+	                  {profileMenuOpen && (
+	                    <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-white/10 rounded-lg shadow-xl py-2 z-[60]">
+	                      <div className="px-4 py-2 border-b border-white/5 mb-2">
+	                        <p className="text-sm font-medium text-white truncate">
+	                          {displayName}
+	                        </p>
+	                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
+	                      </div>
+	                      <Link
+	                        to="/progress"
+	                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+	                        onClick={() => setProfileMenuOpen(false)}
+	                      >
+	                        <BarChart3 size={16} />
+	                        My Progress
+	                      </Link>
+	                      <Link
+	                        to="/bookmarks"
+	                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+	                        onClick={() => setProfileMenuOpen(false)}
+	                      >
+	                        <BookOpen size={16} />
+	                        Bookmarks
+	                      </Link>
+	                      {isAdmin && (
+	                        <Link
+	                          to="/admin"
+	                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+	                          onClick={() => setProfileMenuOpen(false)}
+	                        >
+	                          <Settings size={16} />
+	                          Admin Panel
+	                        </Link>
+	                      )}
+	                      <button
+	                        onClick={handleLogout}
+	                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2 border-t border-white/5 pt-2"
+	                      >
+	                        <LogOut size={16} />
+	                        Sign Out
+	                      </button>
+	                    </div>
+	                  )}
+	                </div>
+	              ) : (
+	                <Link to="/login">
+	                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white">
+	                    Sign Up
+	                  </Button>
+	                </Link>
+	              )}
 
-                  {/* Profile Dropdown */}
-                  {profileDropdownOpen && (
-                    <div className="absolute right-0 mt-2 w-56 bg-slate-900 border border-white/10 rounded-lg shadow-xl py-2">
-                      <div className="px-4 py-2 border-b border-white/10">
-                        <p className="text-white font-medium">{profile?.username || 'User'}</p>
-                        <p className="text-gray-400 text-sm">{profile?.email || user?.email || 'Loading...'}</p>
-                      </div>
-                      
-                      <Link
-                        to="/progress"
-                        onClick={() => setProfileDropdownOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-white/5 hover:text-white"
-                      >
-                        <BarChart3 className="w-4 h-4" />
-                        Progress
-                      </Link>
-                      <Link
-                        to="/bookmarks"
-                        onClick={() => setProfileDropdownOpen(false)}
-                        className="flex items-center gap-2 px-4 py-2 text-gray-300 hover:bg-white/5 hover:text-white"
-                      >
-                        <Bookmark className="w-4 h-4" />
-                        Bookmarks
-                      </Link>
-                      
-                      {isAdmin && (
-                        <Link
-                          to="/admin"
-                          onClick={() => setProfileDropdownOpen(false)}
-                          className="flex items-center gap-2 px-4 py-2 text-orange-500 hover:bg-white/5"
-                        >
-                          <User className="w-4 h-4" />
-                          Admin Panel
-                        </Link>
-                      )}
-                      
-                      <div className="border-t border-white/10 mt-2 pt-2">
-                        <button
-                          onClick={handleLogout}
-                          className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-white/5 w-full text-left"
-                        >
-                          <LogOut className="w-4 h-4" />
-                          Logout
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => navigate('/login')}
-                    className="text-gray-300 hover:text-white"
-                  >
-                    Log In
-                  </Button>
-                  <Button
-                    size="sm"
-                    onClick={() => navigate('/login')}
-                    className="bg-orange-500 hover:bg-orange-600 text-white"
-                  >
-                    Sign Up
-                  </Button>
-                </div>
-              )}
-
-              {/* Mobile Menu Button */}
+              {/* Mobile menu button */}
               <button
+                className="lg:hidden p-2 text-gray-300 hover:text-white"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-                className="md:hidden p-2 rounded-md text-gray-400 hover:text-white hover:bg-white/5"
               >
-                {mobileMenuOpen ? <X className="w-6 h-6" /> : <Menu className="w-6 h-6" />}
+                {mobileMenuOpen ? <X size={24} /> : <Menu size={24} />}
               </button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Bar 2 - Secondary Navigation (Auth Links) */}
-      {user && (
-        <div className="bg-slate-950/60 backdrop-blur-md border-b border-white/10 hidden md:block">
-          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-            <div className="flex items-center justify-center gap-1 h-12">
-              {authLinks.map((link) => (
+      {/* Second Fixed Navbar (Below Top Navbar) */}
+      <div className="bg-slate-950/90 backdrop-blur-md border-b border-white/10">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex items-center justify-center h-12">
+            <div className="flex items-center gap-4 sm:gap-8 overflow-x-auto no-scrollbar">
+              {publicNavLinks.map((link) => (
                 <Link
-                  key={link.to}
-                  to={link.to}
-                  className={cn(
-                    'px-4 py-2 text-sm font-medium transition-colors relative',
-                    isActive(link.to)
+                  key={link.path}
+                  to={link.path}
+                  className={`relative px-1 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                    isActive(link.path)
                       ? 'text-orange-500'
                       : 'text-gray-400 hover:text-white'
-                  )}
+                  }`}
                 >
                   {link.label}
-                  {isActive(link.to) && (
-                    <span className="absolute bottom-0 left-1/2 -translate-x-1/2 w-8 h-0.5 bg-orange-500 rounded-full" />
+                  {isActive(link.path) && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
                   )}
                 </Link>
               ))}
+              {user && (
+                <Link
+                  to="/chat"
+                  className={`relative px-1 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
+                    isActive('/chat')
+                      ? 'text-orange-500'
+                      : 'text-gray-400 hover:text-white'
+                  }`}
+                >
+                  Chat
+                  {isActive('/chat') && (
+                    <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
+                  )}
+                </Link>
+              )}
             </div>
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Mobile Menu */}
+      {/* Mobile Navigation Menu */}
       {mobileMenuOpen && (
-        <div className="md:hidden bg-slate-950/95 backdrop-blur-md border-b border-white/10">
-          <div className="px-4 py-4 space-y-2">
-            {publicLinks.map((link) => (
+        <div className="lg:hidden bg-slate-950 border-b border-white/10 py-4 px-4">
+          <div className="flex flex-col gap-1">
+            {publicNavLinks.map((link) => (
               <Link
-                key={link.to}
-                to={link.to}
-                onClick={() => setMobileMenuOpen(false)}
-                className={cn(
-                  'flex items-center gap-3 px-3 py-2 rounded-md text-base font-medium',
-                  isActive(link.to)
+                key={link.path}
+                to={link.path}
+                className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+                  isActive(link.path)
                     ? 'text-orange-500 bg-orange-500/10'
                     : 'text-gray-300 hover:text-white hover:bg-white/5'
-                )}
+                }`}
+                onClick={() => setMobileMenuOpen(false)}
               >
-                <link.icon className="w-5 h-5" />
                 {link.label}
               </Link>
             ))}
-            
-            {user && (
-              <>
-                <div className="border-t border-white/10 my-2 pt-2" />
-                {authLinks.map((link) => (
-                  <Link
-                    key={link.to}
-                    to={link.to}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={cn(
-                      'flex items-center gap-3 px-3 py-2 rounded-md text-base font-medium',
-                      isActive(link.to)
-                        ? 'text-orange-500 bg-orange-500/10'
-                        : 'text-gray-300 hover:text-white hover:bg-white/5'
-                    )}
-                  >
-                    <link.icon className="w-5 h-5" />
-                    {link.label}
-                  </Link>
-                ))}
-              </>
+            {user && privateNavLinks.map((link) => (
+              <Link
+                key={link.path}
+                to={link.path}
+                className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+                  isActive(link.path)
+                    ? 'text-orange-500 bg-orange-500/10'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5'
+                }`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                {link.label}
+              </Link>
+            ))}
+            {isAdmin && (
+              <Link
+                to="/admin"
+                className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+                  isActive('/admin')
+                    ? 'text-orange-500 bg-orange-500/10'
+                    : 'text-gray-300 hover:text-white hover:bg-white/5'
+                }`}
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Admin
+              </Link>
+            )}
+            {!user && (
+              <Link
+                to="/login"
+                className="px-3 py-2 text-sm font-medium text-orange-500 hover:bg-orange-500/10 rounded-md mt-2"
+                onClick={() => setMobileMenuOpen(false)}
+              >
+                Login
+              </Link>
             )}
           </div>
         </div>
@@ -274,5 +316,3 @@ export function Navbar() {
     </nav>
   );
 }
-
-export default Navbar;

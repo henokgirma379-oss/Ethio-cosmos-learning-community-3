@@ -1,915 +1,804 @@
-import { useEffect, useState } from 'react';
-import { Plus, Trash2, Save, ArrowUp, ArrowDown } from 'lucide-react';
-import { toast } from 'sonner';
+import { useEffect, useState, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { useAuth } from '@/context/AuthContext';
+import { useCms } from '@/context/CmsContext';
+import { isValidConfig } from '@/supabase';
+import { uploadImage } from '@/services/cms';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useData } from '@/context/DataContext';
-import { fetchAllQuizzes, createQuiz, upsertQuizQuestion, deleteQuizQuestion, deleteQuiz } from '@/services/quizzes';
-import type { Topic, Subtopic, LessonBlock, Quiz, QuizQuestion } from '@/types';
+import { ArrowUp, ArrowDown, Plus, Trash2, Upload, FileText, Image as ImageIcon } from 'lucide-react';
+import type {
+  Topic,
+  Subtopic,
+  LessonBlock,
+  FeaturedTopic,
+  FeatureCard,
+  GalleryImage,
+  VideoItem,
+  PdfItem,
+  Quiz,
+  QuizQuestion,
+} from '@/types';
+import { v4 as uuidv4 } from 'uuid';
 
-// FIX: Removed redundant useNavigate, useAuth, and the useEffect that duplicated
-// the access control already handled by <ProtectedRoute adminOnly> in App.tsx.
+// ─── Image Upload Component ───────────────────────────────────────────────────
+interface ImageUploadProps {
+  currentImage: string;
+  onImageUploaded: (url: string) => void;
+  label: string;
+}
 
-export function AdminPage() {
-  const { 
-    topics, 
-    homepage, 
-    about, 
-    materials,
-    saveTopicRow, 
-    removeTopicRow, 
-    reorderTopicRows,
-    saveSubtopicRow,
-    removeSubtopicRow,
-    saveLessonBlocks,
-    saveHomepageContent,
-    saveAboutContent,
-    saveMaterialsContent,
-    loadSubtopics,
-    getSubtopics,
-    getLesson,
-    loadLesson,
-  } = useData();
+function ImageUpload({ currentImage, onImageUploaded, label }: ImageUploadProps) {
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeTab, setActiveTab] = useState('topics');
-  const [selectedTopic, setSelectedTopic] = useState<string>('');
-  const [selectedSubtopic, setSelectedSubtopic] = useState<string>('');
-  const [subtopics, setSubtopics] = useState<Subtopic[]>([]);
-  const [lessonBlocks, setLessonBlocks] = useState<LessonBlock[]>([]);
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  // Form states
-  const [editingTopic, setEditingTopic] = useState<Partial<Topic> | null>(null);
-  const [editingSubtopic, setEditingSubtopic] = useState<Partial<Subtopic> | null>(null);
-  const [homepageForm, setHomepageForm] = useState(homepage);
-  const [aboutForm, setAboutForm] = useState(about);
-  const [materialsForm, setMaterialsForm] = useState(materials);
-
-  // Quiz state
-  const [quizzes, setQuizzes] = useState<Quiz[]>([]);
-  const [quizzesLoading, setQuizzesLoading] = useState(false);
-  const [selectedQuiz, setSelectedQuiz] = useState<Quiz | null>(null);
-  const [newQuizTitle, setNewQuizTitle] = useState('');
-  const [newQuizDescription, setNewQuizDescription] = useState('');
-  const [editingQuestion, setEditingQuestion] = useState<Partial<QuizQuestion> | null>(null);
-
-  // Load subtopics when topic is selected
-  useEffect(() => {
-    if (selectedTopic) {
-      const load = async () => {
-        // FIX: loadSubtopics now supports forceRefresh — always load fresh when
-        // admin switches topics so we don't show stale cached data.
-        await loadSubtopics(selectedTopic);
-        setSubtopics(getSubtopics(selectedTopic));
-      };
-      load();
+    if (!isValidConfig) {
+      alert('Supabase is not configured. Please add your credentials to the .env file.');
+      return;
     }
-  }, [selectedTopic, loadSubtopics, getSubtopics]);
 
-  // Load lesson when subtopic is selected
-  useEffect(() => {
-    if (selectedSubtopic) {
-      const load = async () => {
-        await loadLesson(selectedSubtopic);
-        const lesson = getLesson(selectedSubtopic);
-        setLessonBlocks(lesson?.blocks || []);
-      };
-      load();
-    }
-  }, [selectedSubtopic, loadLesson, getLesson]);
-
-  // Update forms when data changes
-  useEffect(() => { setHomepageForm(homepage); }, [homepage]);
-  useEffect(() => { setAboutForm(about); }, [about]);
-  useEffect(() => { setMaterialsForm(materials); }, [materials]);
-
-  // Load quizzes when quiz tab is active
-  useEffect(() => {
-    if (activeTab === 'quizzes') {
-      loadQuizzes();
-    }
-  }, [activeTab]);
-
-  const loadQuizzes = async () => {
+    setUploading(true);
     try {
-      setQuizzesLoading(true);
-      const data = await fetchAllQuizzes();
-      setQuizzes(data);
+      const publicUrl = await uploadImage(file, 'uploads');
+      if (publicUrl) {
+        onImageUploaded(publicUrl);
+      }
     } catch (error) {
-      console.error('Error loading quizzes:', error);
-      toast.error('Failed to load quizzes');
+      console.error('Error uploading image:', error);
+      alert('Failed to upload image. Make sure the "uploads" storage bucket exists in Supabase and RLS policies allow uploads.');
     } finally {
-      setQuizzesLoading(false);
+      setUploading(false);
     }
-  };
-
-  // ─── Topic management ────────────────────────────────────────────────────────
-
-  const handleSaveTopic = async () => {
-    if (!editingTopic?.title || !editingTopic?.slug) return;
-    try {
-      await saveTopicRow(editingTopic);
-      setEditingTopic(null);
-      toast.success('Topic saved!');
-    } catch {
-      toast.error('Failed to save topic');
-    }
-  };
-
-  const handleDeleteTopic = async (id: string) => {
-    // FIX: replaced native confirm() with a simple inline guard — sonner doesn't
-    // have a confirm dialog but we keep the action safe by requiring the button click.
-    try {
-      await removeTopicRow(id);
-      toast.success('Topic deleted');
-    } catch {
-      toast.error('Failed to delete topic');
-    }
-  };
-
-  const handleMoveTopic = async (index: number, direction: 'up' | 'down') => {
-    if (direction === 'up' && index === 0) return;
-    if (direction === 'down' && index === topics.length - 1) return;
-
-    const newOrder = [...topics];
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    [newOrder[index], newOrder[targetIndex]] = [newOrder[targetIndex], newOrder[index]];
-    
-    try {
-      await reorderTopicRows(newOrder.map((t) => t.id));
-    } catch {
-      toast.error('Failed to reorder topics');
-    }
-  };
-
-  // ─── Subtopic management ─────────────────────────────────────────────────────
-
-  const handleSaveSubtopic = async () => {
-    if (!editingSubtopic?.title || !editingSubtopic?.slug || !selectedTopic) return;
-    try {
-      // FIX: saveSubtopicRow now force-reloads subtopics after save (in DataContext),
-      // so we just refresh local state from the updated cache.
-      await saveSubtopicRow({ ...editingSubtopic, topicId: selectedTopic });
-      setEditingSubtopic(null);
-      setSubtopics(getSubtopics(selectedTopic));
-      toast.success('Subtopic saved!');
-    } catch {
-      toast.error('Failed to save subtopic');
-    }
-  };
-
-  const handleDeleteSubtopic = async (id: string) => {
-    if (!selectedTopic) return;
-    try {
-      // FIX: removeSubtopicRow now requires topicId so DataContext can invalidate
-      // only that topic's cache (not all subtopic caches).
-      await removeSubtopicRow(id, selectedTopic);
-      setSubtopics(getSubtopics(selectedTopic));
-      toast.success('Subtopic deleted');
-    } catch {
-      toast.error('Failed to delete subtopic');
-    }
-  };
-
-  // ─── Lesson management ───────────────────────────────────────────────────────
-
-  const handleSaveLesson = async () => {
-    if (!selectedSubtopic) return;
-    try {
-      await saveLessonBlocks(selectedSubtopic, lessonBlocks);
-      toast.success('Lesson saved!');
-    } catch {
-      toast.error('Failed to save lesson');
-    }
-  };
-
-  const addLessonBlock = (type: 'text' | 'image') => {
-    setLessonBlocks([...lessonBlocks, { type, content: '' }]);
-  };
-
-  const updateLessonBlock = (index: number, content: string) => {
-    const newBlocks = [...lessonBlocks];
-    newBlocks[index] = { ...newBlocks[index], content };
-    setLessonBlocks(newBlocks);
-  };
-
-  const removeLessonBlock = (index: number) => {
-    setLessonBlocks(lessonBlocks.filter((_, i) => i !== index));
-  };
-
-  // ─── Homepage / About / Materials ────────────────────────────────────────────
-
-  const handleSaveHomepage = async () => {
-    try {
-      await saveHomepageContent(homepageForm);
-      toast.success('Homepage content saved!');
-    } catch {
-      toast.error('Failed to save homepage content');
-    }
-  };
-
-  const handleSaveAbout = async () => {
-    try {
-      await saveAboutContent(aboutForm);
-      toast.success('About content saved!');
-    } catch {
-      toast.error('Failed to save about content');
-    }
-  };
-
-  const handleSaveMaterials = async () => {
-    try {
-      await saveMaterialsContent(materialsForm);
-      toast.success('Materials content saved!');
-    } catch {
-      toast.error('Failed to save materials content');
-    }
-  };
-
-  // ─── Quiz management ─────────────────────────────────────────────────────────
-
-  const handleCreateQuiz = async () => {
-    if (!newQuizTitle.trim()) return;
-    try {
-      const quiz = await createQuiz({ title: newQuizTitle.trim(), description: newQuizDescription.trim() || undefined });
-      setQuizzes((prev) => [...prev, quiz]);
-      setNewQuizTitle('');
-      setNewQuizDescription('');
-      toast.success('Quiz created!');
-    } catch {
-      toast.error('Failed to create quiz');
-    }
-  };
-
-  const handleDeleteQuiz = async (quizId: string) => {
-    try {
-      await deleteQuiz(quizId);
-      setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
-      if (selectedQuiz?.id === quizId) setSelectedQuiz(null);
-      toast.success('Quiz deleted');
-    } catch {
-      toast.error('Failed to delete quiz');
-    }
-  };
-
-  const handleSaveQuestion = async () => {
-    if (!selectedQuiz || !editingQuestion?.questionText || !editingQuestion.options || editingQuestion.correctIndex === undefined) return;
-    try {
-      const saved = await upsertQuizQuestion({
-        ...editingQuestion,
-        quizId: selectedQuiz.id,
-        questionText: editingQuestion.questionText!,
-        options: editingQuestion.options!,
-        correctIndex: editingQuestion.correctIndex!,
-        sortOrder: editingQuestion.sortOrder ?? selectedQuiz.questions.length,
-      });
-
-      setSelectedQuiz((prev) => {
-        if (!prev) return prev;
-        const exists = prev.questions.find((q) => q.id === saved.id);
-        const updatedQuestions = exists
-          ? prev.questions.map((q) => (q.id === saved.id ? saved : q))
-          : [...prev.questions, saved];
-        return { ...prev, questions: updatedQuestions };
-      });
-
-      setQuizzes((prev) =>
-        prev.map((q) => {
-          if (q.id !== selectedQuiz.id) return q;
-          const exists = q.questions.find((qq) => qq.id === saved.id);
-          return {
-            ...q,
-            questions: exists
-              ? q.questions.map((qq) => (qq.id === saved.id ? saved : qq))
-              : [...q.questions, saved],
-          };
-        })
-      );
-
-      setEditingQuestion(null);
-      toast.success('Question saved!');
-    } catch {
-      toast.error('Failed to save question');
-    }
-  };
-
-  const handleDeleteQuestion = async (questionId: string) => {
-    try {
-      await deleteQuizQuestion(questionId);
-      setSelectedQuiz((prev) => {
-        if (!prev) return prev;
-        return { ...prev, questions: prev.questions.filter((q) => q.id !== questionId) };
-      });
-      toast.success('Question deleted');
-    } catch {
-      toast.error('Failed to delete question');
-    }
-  };
-
-  const updateQuestionOption = (optionIndex: number, value: string) => {
-    if (!editingQuestion) return;
-    const options = [...(editingQuestion.options || ['', '', '', ''])];
-    options[optionIndex] = value;
-    setEditingQuestion({ ...editingQuestion, options });
   };
 
   return (
-    <div className="min-h-screen bg-[#050810] py-8">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-bold text-white mb-8">Admin Panel</h1>
+    <div className="space-y-3">
+      {label && <label className="block text-sm text-gray-400">{label}</label>}
+      <div className="flex items-center gap-4">
+        {currentImage && (
+          <img src={currentImage} alt="Preview" className="w-20 h-20 object-cover rounded-lg border border-white/10" />
+        )}
+        <div className="flex-1">
+          <Input
+            value={currentImage}
+            onChange={(e) => onImageUploaded(e.target.value)}
+            className="bg-slate-800 border-white/20 text-white mb-2"
+            placeholder="Or paste image URL here"
+          />
+          <input type="file" accept="image/*" className="hidden" ref={fileInputRef} onChange={handleFileSelect} />
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={uploading}
+            className="border-white/20 text-white hover:bg-white/10"
+          >
+            <Upload size={16} className="mr-2" />
+            {uploading ? 'Uploading...' : 'Upload Image'}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Admin Page ───────────────────────────────────────────────────────────────
+export default function AdminPage() {
+  const navigate = useNavigate();
+  const { user, isAdmin } = useAuth();
+  const { 
+    homepageHero, homepageFeatureCards, homepageFeaturedTopics,
+    aboutContent,
+    materialsGalleryImages, materialsVideos, materialsPdfs,
+    topics: topicsHook,
+    subtopics: subtopicsHookFactory,
+    lesson: lessonHookFactory,
+    quizzes: quizzesHook,
+    quizQuestions: quizQuestionsHookFactory,
+  } = useCms();
+
+  const [activeTab, setActiveTab] = useState('homepage');
+  const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);
+  const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(null);
+  const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
+
+  const { topics, addTopic, editTopic, removeTopic, loading: topicsLoading, error: topicsError } = topicsHook;
+  const { subtopics, addSubtopic, editSubtopic, removeSubtopic, loading: subtopicsLoading, error: subtopicsError } = subtopicsHookFactory(selectedTopicId);
+  const { lesson, saveLesson, loading: lessonLoading, error: lessonError } = lessonHookFactory(selectedSubtopicId);
+  const { quizzes, addQuiz, editQuiz, removeQuiz, loading: quizzesLoading, error: quizzesError } = quizzesHook;
+  const { quizQuestions, addQuizQuestion, editQuizQuestion, removeQuizQuestion, loading: quizQuestionsLoading, error: quizQuestionsError } = quizQuestionsHookFactory(selectedQuizId);
+
+  useEffect(() => {
+    if (!user) navigate('/login');
+    else if (!isAdmin) navigate('/');
+  }, [user, isAdmin, navigate]);
+
+  if (!user || !isAdmin) return null;
+
+  const allLoading = topicsLoading || subtopicsLoading || lessonLoading || quizzesLoading || quizQuestionsLoading || homepageHero.loading || homepageFeatureCards.loading || homepageFeaturedTopics.loading || aboutContent.loading || materialsGalleryImages.loading || materialsVideos.loading || materialsPdfs.loading;
+  const anyError = topicsError || subtopicsError || lessonError || quizzesError || quizQuestionsError || homepageHero.error || homepageFeatureCards.error || homepageFeaturedTopics.error || aboutContent.error || materialsGalleryImages.error || materialsVideos.error || materialsPdfs.error;
+
+  if (allLoading) {
+    return (
+      <div className="min-h-screen pt-24 flex items-center justify-center bg-[#0a0e1a] text-white">
+        Loading admin data...
+      </div>
+    );
+  }
+
+  if (anyError) {
+    return (
+      <div className="min-h-screen pt-24 flex items-center justify-center bg-[#0a0e1a] text-red-400">
+        Error loading admin data: {anyError}
+      </div>
+    );
+  }
+
+  // ── Homepage ────────────────────────────────────────────────────────────────
+  const updateFeatureCard = async (i: number, field: keyof FeatureCard, value: string) => {
+    const updatedCards = [...homepageFeatureCards.featureCards];
+    updatedCards[i] = { ...updatedCards[i], [field]: value };
+    await homepageFeatureCards.saveFeatureCards(updatedCards);
+  };
+
+  const updateFeaturedTopic = async (i: number, field: keyof FeaturedTopic, value: string) => {
+    const updatedTopics = [...homepageFeaturedTopics.featuredTopics];
+    updatedTopics[i] = { ...updatedTopics[i], [field]: value };
+    await homepageFeaturedTopics.saveFeaturedTopics(updatedTopics);
+  };
+
+  const addFeaturedTopic = async () => {
+    const newTopic: FeaturedTopic = { id: uuidv4(), title: 'New Topic', description: 'Description', image_url: '/images/topic-fundamentals.jpg' };
+    await homepageFeaturedTopics.saveFeaturedTopics([...homepageFeaturedTopics.featuredTopics, newTopic]);
+  };
+
+  const deleteFeaturedTopic = async (i: number) => {
+    const updatedTopics = homepageFeaturedTopics.featuredTopics.filter((_, idx) => idx !== i);
+    await homepageFeaturedTopics.saveFeaturedTopics(updatedTopics);
+  };
+
+  // ── Topics ──────────────────────────────────────────────────────────────────
+  const handleUpdateTopic = async (id: string, field: keyof Topic, value: string | number) => {
+    await editTopic(id, { [field]: value });
+  };
+
+  const handleAddTopic = async () => {
+    const newTopic: Omit<Topic, "id" | "created_at" | "updated_at"> = { 
+      emoji: '🚀', 
+      title: 'New Topic', 
+      description: 'Description', 
+      order_index: topics.length, 
+      image_url: '/images/topic-fundamentals.jpg' 
+    };
+    await addTopic(newTopic);
+  };
+
+  const handleDeleteTopic = async (id: string) => {
+    await removeTopic(id);
+  };
+
+  const moveTopic = async (i: number, dir: 'up' | 'down') => {
+    const updatedTopics = [...topics];
+    if (dir === 'up' && i === 0) return;
+    if (dir === 'down' && i === updatedTopics.length - 1) return;
+    const swap = dir === 'up' ? i - 1 : i + 1;
+    [updatedTopics[i], updatedTopics[swap]] = [updatedTopics[swap], updatedTopics[i]];
+    // Update order_index for both swapped topics
+    await editTopic(updatedTopics[i].id, { order_index: i });
+    await editTopic(updatedTopics[swap].id, { order_index: swap });
+    // Re-fetch to ensure UI is consistent with DB order
+    topicsHook.fetchTopics();
+  };
+
+  // ── Subtopics ───────────────────────────────────────────────────────────────
+  const handleUpdateSubtopic = async (id: string, field: keyof Subtopic, value: string) => {
+    await editSubtopic(id, { [field]: value });
+  };
+
+  const handleAddSubtopic = async () => {
+    if (!selectedTopicId) return;
+    const newSubtopic: Omit<Subtopic, "id" | "created_at" | "updated_at"> = { 
+      topic_id: selectedTopicId, 
+      emoji: '📚', 
+      title: 'New Lesson', 
+      description: 'Lesson description', 
+      order_index: subtopics.length 
+    };
+    await addSubtopic(newSubtopic);
+  };
+
+  const handleDeleteSubtopic = async (id: string) => {
+    await removeSubtopic(id);
+  };
+
+  const moveSubtopic = async (i: number, dir: 'up' | 'down') => {
+    if (!selectedTopicId) return;
+    const updatedSubtopics = [...subtopics];
+    if (dir === 'up' && i === 0) return;
+    if (dir === 'down' && i === updatedSubtopics.length - 1) return;
+    const swap = dir === 'up' ? i - 1 : i + 1;
+    [updatedSubtopics[i], updatedSubtopics[swap]] = [updatedSubtopics[swap], updatedSubtopics[i]];
+    // Update order_index for both swapped subtopics
+    await editSubtopic(updatedSubtopics[i].id, { order_index: i });
+    await editSubtopic(updatedSubtopics[swap].id, { order_index: swap });
+    // Re-fetch to ensure UI is consistent with DB order
+    subtopicsHookFactory(selectedTopicId).fetchSubtopics();
+  };
+
+  // ── Lessons ─────────────────────────────────────────────────────────────────
+  const currentLessonBlocks = lesson?.content_blocks || [];
+
+  const handleSaveLessonBlocks = async (blocks: LessonBlock[]) => {
+    if (!selectedSubtopicId) return;
+    const currentSubtopic = subtopics.find(s => s.id === selectedSubtopicId);
+    if (!currentSubtopic) return;
+
+    await saveLesson({
+      subtopic_id: selectedSubtopicId,
+      title: currentSubtopic.title, // Lesson title from subtopic
+      content_blocks: blocks,
+    });
+  };
+
+  const updateLessonBlock = (i: number, content: string) => {
+    const updatedBlocks = [...currentLessonBlocks];
+    updatedBlocks[i] = { ...updatedBlocks[i], content };
+    handleSaveLessonBlocks(updatedBlocks);
+  };
+
+  const addLessonBlock = (type: 'text' | 'image') => {
+    handleSaveLessonBlocks([...currentLessonBlocks, { type, content: '' }]);
+  };
+
+  const removeLessonBlock = (i: number) => {
+    handleSaveLessonBlocks(currentLessonBlocks.filter((_, idx) => idx !== i));
+  };
+
+  const moveLessonBlock = (i: number, dir: 'up' | 'down') => {
+    const updatedBlocks = [...currentLessonBlocks];
+    if (dir === 'up' && i === 0) return;
+    if (dir === 'down' && i === updatedBlocks.length - 1) return;
+    const swap = dir === 'up' ? i - 1 : i + 1;
+    [updatedBlocks[i], updatedBlocks[swap]] = [updatedBlocks[swap], updatedBlocks[i]];
+    handleSaveLessonBlocks(updatedBlocks);
+  };
+
+  // ── About Page ──────────────────────────────────────────────────────────────
+  const handleUpdateAboutContent = async (field: string, value: string) => {
+    const updatedContent = { ...aboutContent.aboutContent, [field]: value };
+    await aboutContent.saveAboutContent(updatedContent);
+  };
+
+  // ── Materials ───────────────────────────────────────────────────────────────
+  const handleAddGalleryImage = async () => {
+    const newImage: GalleryImage = { id: uuidv4(), url: '', title: 'New Image' };
+    await materialsGalleryImages.saveGalleryImages([...materialsGalleryImages.galleryImages, newImage]);
+  };
+
+  const handleUpdateGalleryImage = async (id: string, field: keyof GalleryImage, value: string) => {
+    const updatedImages = materialsGalleryImages.galleryImages.map(img => 
+      img.id === id ? { ...img, [field]: value } : img
+    );
+    await materialsGalleryImages.saveGalleryImages(updatedImages);
+  };
+
+  const handleDeleteGalleryImage = async (id: string) => {
+    const updatedImages = materialsGalleryImages.galleryImages.filter(img => img.id !== id);
+    await materialsGalleryImages.saveGalleryImages(updatedImages);
+  };
+
+  const handleAddVideo = async () => {
+    const newVideo: VideoItem = { id: uuidv4(), url: '', thumbnail: '', title: 'New Video' };
+    await materialsVideos.saveVideos([...materialsVideos.videos, newVideo]);
+  };
+
+  const handleUpdateVideo = async (id: string, field: keyof VideoItem, value: string) => {
+    const updatedVideos = materialsVideos.videos.map(video => 
+      video.id === id ? { ...video, [field]: value } : video
+    );
+    await materialsVideos.saveVideos(updatedVideos);
+  };
+
+  const handleDeleteVideo = async (id: string) => {
+    const updatedVideos = materialsVideos.videos.filter(video => video.id !== id);
+    await materialsVideos.saveVideos(updatedVideos);
+  };
+
+  const handleAddPdf = async () => {
+    const newPdf: PdfItem = { id: uuidv4(), url: '', title: 'New PDF', label: 'New PDF' };
+    await materialsPdfs.savePdfs([...materialsPdfs.pdfs, newPdf]);
+  };
+
+  const handleUpdatePdf = async (id: string, field: keyof PdfItem, value: string) => {
+    const updatedPdfs = materialsPdfs.pdfs.map(pdf => 
+      pdf.id === id ? { ...pdf, [field]: value } : pdf
+    );
+    await materialsPdfs.savePdfs(updatedPdfs);
+  };
+
+  const handleDeletePdf = async (id: string) => {
+    const updatedPdfs = materialsPdfs.pdfs.filter(pdf => pdf.id !== id);
+    await materialsPdfs.savePdfs(updatedPdfs);
+  };
+
+  // ── Quizzes ─────────────────────────────────────────────────────────────────
+  const handleAddQuiz = async () => {
+    const newQuiz: Omit<Quiz, "id" | "created_at" | "updated_at"> = { title: 'New Quiz', description: 'Quiz description' };
+    await addQuiz(newQuiz);
+  };
+  // (Quiz / QuizQuestion types are imported above)
+
+  const handleUpdateQuiz = async (id: string, field: keyof Quiz, value: string) => {
+    await editQuiz(id, { [field]: value });
+  };
+
+  const handleDeleteQuiz = async (id: string) => {
+    await removeQuiz(id);
+  };
+
+  // ── Quiz Questions ──────────────────────────────────────────────────────────
+  const handleAddQuizQuestion = async () => {
+    if (!selectedQuizId) return;
+    const newQuestion: Omit<QuizQuestion, "id" | "created_at" | "updated_at"> = {
+      quiz_id: selectedQuizId,
+      question_text: 'New Question',
+      options: ['Option 1', 'Option 2'],
+      correct_answer: 0,
+      order_index: quizQuestions.length,
+    };
+    await addQuizQuestion(newQuestion);
+  };
+
+  const handleUpdateQuizQuestion = async (
+    id: string,
+    field: keyof QuizQuestion,
+    value: QuizQuestion[keyof QuizQuestion]
+  ) => {
+    await editQuizQuestion(id, { [field]: value });
+  };
+
+  const handleDeleteQuizQuestion = async (id: string) => {
+    await removeQuizQuestion(id);
+  };
+
+  return (
+    <div className="min-h-screen pt-24 pb-12 bg-[#0a0e1a]">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+        <h1 className="text-3xl font-bold text-white mb-2">Admin Dashboard</h1>
+        <p className="text-gray-400 mb-8">Signed in as {user.email}</p>
 
         <Tabs value={activeTab} onValueChange={setActiveTab}>
-          <TabsList className="bg-slate-900 border border-white/10 mb-8">
-            <TabsTrigger value="topics">Topics</TabsTrigger>
-            <TabsTrigger value="lessons">Lessons</TabsTrigger>
-            <TabsTrigger value="quizzes">Quizzes</TabsTrigger>
-            <TabsTrigger value="homepage">Homepage</TabsTrigger>
-            <TabsTrigger value="about">About</TabsTrigger>
-            <TabsTrigger value="materials">Materials</TabsTrigger>
+          <TabsList className="bg-slate-900 border border-white/10 mb-8 flex flex-wrap gap-1 h-auto p-1">
+            {['homepage','topics','subtopics','lessons','about','materials', 'quizzes'].map(tab => (
+              <TabsTrigger key={tab} value={tab} className="data-[state=active]:bg-orange-500 data-[state=active]:text-white capitalize">
+                {tab}
+              </TabsTrigger>
+            ))}
           </TabsList>
 
-          {/* ── Topics Tab ──────────────────────────────────────────────────── */}
-          <TabsContent value="topics">
-            <Card className="bg-slate-900 border-white/10">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white">Manage Topics</CardTitle>
-                  <Button
-                    onClick={() => setEditingTopic({ emoji: '🌌', sortOrder: topics.length })}
-                    className="bg-orange-500 hover:bg-orange-600 text-white"
-                  >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Add Topic
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent>
-                {editingTopic && (
-                  <div className="mb-6 p-4 bg-slate-800 rounded-lg space-y-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-gray-300">Title</Label>
-                        <Input
-                          value={editingTopic.title || ''}
-                          onChange={(e) => setEditingTopic({ ...editingTopic, title: e.target.value })}
-                          className="bg-slate-700 border-white/10 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-gray-300">Slug</Label>
-                        <Input
-                          value={editingTopic.slug || ''}
-                          onChange={(e) => setEditingTopic({ ...editingTopic, slug: e.target.value })}
-                          className="bg-slate-700 border-white/10 text-white"
-                        />
-                      </div>
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <Label className="text-gray-300">Emoji</Label>
-                        <Input
-                          value={editingTopic.emoji || ''}
-                          onChange={(e) => setEditingTopic({ ...editingTopic, emoji: e.target.value })}
-                          className="bg-slate-700 border-white/10 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label className="text-gray-300">Image URL</Label>
-                        <Input
-                          value={editingTopic.imageUrl || ''}
-                          onChange={(e) => setEditingTopic({ ...editingTopic, imageUrl: e.target.value })}
-                          className="bg-slate-700 border-white/10 text-white"
-                        />
-                      </div>
-                    </div>
-                    <div>
-                      <Label className="text-gray-300">Description</Label>
-                      <Textarea
-                        value={editingTopic.description || ''}
-                        onChange={(e) => setEditingTopic({ ...editingTopic, description: e.target.value })}
-                        className="bg-slate-700 border-white/10 text-white"
-                      />
-                    </div>
-                    <div className="flex gap-2">
-                      <Button onClick={handleSaveTopic} className="bg-green-600 hover:bg-green-700 text-white">
-                        <Save className="w-4 h-4 mr-2" />
-                        Save
-                      </Button>
-                      <Button variant="outline" onClick={() => setEditingTopic(null)}>
-                        Cancel
-                      </Button>
-                    </div>
-                  </div>
-                )}
-
-                <div className="space-y-2">
-                  {topics.map((topic, index) => (
-                    <div
-                      key={topic.id}
-                      className="flex items-center justify-between p-3 bg-slate-800 rounded-lg"
-                    >
-                      <div className="flex items-center gap-3">
-                        <span className="text-xl">{topic.emoji}</span>
-                        <span className="text-white">{topic.title}</span>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleMoveTopic(index, 'up')}
-                          disabled={index === 0}
-                          className="p-1 text-gray-400 hover:text-white disabled:opacity-30"
-                        >
-                          <ArrowUp className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleMoveTopic(index, 'down')}
-                          disabled={index === topics.length - 1}
-                          className="p-1 text-gray-400 hover:text-white disabled:opacity-30"
-                        >
-                          <ArrowDown className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditingTopic(topic)}
-                          className="p-1 text-blue-400 hover:text-blue-300"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDeleteTopic(topic.id)}
-                          className="p-1 text-red-400 hover:text-red-300"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ── Lessons Tab ─────────────────────────────────────────────────── */}
-          <TabsContent value="lessons">
-            <Card className="bg-slate-900 border-white/10">
-              <CardHeader>
-                <CardTitle className="text-white">Manage Lessons</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-6">
+          {/* ── HOMEPAGE TAB ────────────────────────────────────────────── */}
+          <TabsContent value="homepage" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Hero Section</h2>
+              <div className="space-y-4">
                 <div>
-                  <Label className="text-gray-300">Select Topic</Label>
-                  <Select value={selectedTopic} onValueChange={setSelectedTopic}>
-                    <SelectTrigger className="bg-slate-700 border-white/10 text-white">
-                      <SelectValue placeholder="Choose a topic" />
-                    </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-white/10">
-                      {topics.map((topic) => (
-                        <SelectItem key={topic.id} value={topic.id}>
-                          {topic.emoji} {topic.title}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <label className="block text-sm text-gray-400 mb-1">Title</label>
+                  <Input value={homepageHero.hero?.heroTitle || ''} onChange={(e) => homepageHero.saveHero({ ...homepageHero.hero!, heroTitle: e.target.value })} className="bg-slate-800 border-white/20 text-white" />
                 </div>
+                <div>
+                  <label className="block text-sm text-gray-400 mb-1">Subtitle</label>
+                  <Input value={homepageHero.hero?.heroSubtitle || ''} onChange={(e) => homepageHero.saveHero({ ...homepageHero.hero!, heroSubtitle: e.target.value })} className="bg-slate-800 border-white/20 text-white" />
+                </div>
+              </div>
+            </div>
 
-                {selectedTopic && (
-                  <>
-                    <div>
-                      <div className="flex items-center justify-between mb-4">
-                        <Label className="text-gray-300">Subtopics</Label>
-                        <Button
-                          size="sm"
-                          onClick={() => setEditingSubtopic({ emoji: '📚', sortOrder: subtopics.length })}
-                          className="bg-orange-500 hover:bg-orange-600 text-white"
-                        >
-                          <Plus className="w-4 h-4 mr-2" />
-                          Add Subtopic
-                        </Button>
-                      </div>
-
-                      {editingSubtopic && (
-                        <div className="mb-4 p-4 bg-slate-800 rounded-lg space-y-4">
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-gray-300">Title</Label>
-                              <Input
-                                value={editingSubtopic.title || ''}
-                                onChange={(e) => setEditingSubtopic({ ...editingSubtopic, title: e.target.value })}
-                                className="bg-slate-700 border-white/10 text-white"
-                              />
-                            </div>
-                            <div>
-                              <Label className="text-gray-300">Slug</Label>
-                              <Input
-                                value={editingSubtopic.slug || ''}
-                                onChange={(e) => setEditingSubtopic({ ...editingSubtopic, slug: e.target.value })}
-                                className="bg-slate-700 border-white/10 text-white"
-                              />
-                            </div>
-                          </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <Label className="text-gray-300">Emoji</Label>
-                              <Input
-                                value={editingSubtopic.emoji || ''}
-                                onChange={(e) => setEditingSubtopic({ ...editingSubtopic, emoji: e.target.value })}
-                                className="bg-slate-700 border-white/10 text-white"
-                              />
-                            </div>
-                          </div>
-                          <div>
-                            <Label className="text-gray-300">Description</Label>
-                            <Textarea
-                              value={editingSubtopic.description || ''}
-                              onChange={(e) => setEditingSubtopic({ ...editingSubtopic, description: e.target.value })}
-                              className="bg-slate-700 border-white/10 text-white"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button onClick={handleSaveSubtopic} className="bg-green-600 hover:bg-green-700 text-white">
-                              <Save className="w-4 h-4 mr-2" />
-                              Save
-                            </Button>
-                            <Button variant="outline" onClick={() => setEditingSubtopic(null)}>
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        {subtopics.map((subtopic) => (
-                          <div
-                            key={subtopic.id}
-                            className={`flex items-center justify-between p-3 rounded-lg cursor-pointer ${
-                              selectedSubtopic === subtopic.id
-                                ? 'bg-orange-500/20 border border-orange-500'
-                                : 'bg-slate-800'
-                            }`}
-                            onClick={() => setSelectedSubtopic(subtopic.id)}
-                          >
-                            <div className="flex items-center gap-3">
-                              <span>{subtopic.emoji}</span>
-                              <span className="text-white">{subtopic.title}</span>
-                            </div>
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                handleDeleteSubtopic(subtopic.id);
-                              }}
-                              className="p-1 text-red-400 hover:text-red-300"
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </div>
-                        ))}
-                      </div>
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Feature Cards</h2>
+              <div className="space-y-4">
+                {homepageFeatureCards.featureCards.map((card, i) => (
+                  <div key={i} className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Icon (Emoji)</label>
+                      <Input value={card.icon} onChange={(e) => updateFeatureCard(i, 'icon', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={card.title} onChange={(e) => updateFeatureCard(i, 'title', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Description</label>
+                      <Textarea value={card.description} onChange={(e) => updateFeatureCard(i, 'description', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
                     </div>
-
-                    {selectedSubtopic && (
-                      <div className="border-t border-white/10 pt-6">
-                        <div className="flex items-center justify-between mb-4">
-                          <Label className="text-gray-300">Lesson Content</Label>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => addLessonBlock('text')}
-                              className="border-white/20 text-white"
-                            >
-                              <Plus className="w-4 h-4 mr-2" />
-                              Add Text
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => addLessonBlock('image')}
-                              className="border-white/20 text-white"
-                            >
-                              <Plus className="w-4 h-4 mr-2" />
-                              Add Image
-                            </Button>
-                          </div>
-                        </div>
-
-                        <div className="space-y-4">
-                          {lessonBlocks.map((block, index) => (
-                            <div key={index} className="p-4 bg-slate-800 rounded-lg">
-                              <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm text-gray-400 uppercase">{block.type}</span>
-                                <button
-                                  onClick={() => removeLessonBlock(index)}
-                                  className="p-1 text-red-400 hover:text-red-300"
-                                >
-                                  <Trash2 className="w-4 h-4" />
-                                </button>
-                              </div>
-                              {block.type === 'text' ? (
-                                <Textarea
-                                  value={block.content}
-                                  onChange={(e) => updateLessonBlock(index, e.target.value)}
-                                  className="bg-slate-700 border-white/10 text-white"
-                                  rows={4}
-                                />
-                              ) : (
-                                <Input
-                                  value={block.content}
-                                  onChange={(e) => updateLessonBlock(index, e.target.value)}
-                                  placeholder="Image URL"
-                                  className="bg-slate-700 border-white/10 text-white"
-                                />
-                              )}
-                            </div>
-                          ))}
-                        </div>
-
-                        {lessonBlocks.length > 0 && (
-                          <Button onClick={handleSaveLesson} className="mt-4 bg-green-600 hover:bg-green-700 text-white">
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Lesson
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                  </>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          {/* ── Quizzes Tab (NEW) ───────────────────────────────────────────── */}
-          <TabsContent value="quizzes">
-            <div className="grid lg:grid-cols-2 gap-6">
-              {/* Left: Quiz list + create */}
-              <Card className="bg-slate-900 border-white/10">
-                <CardHeader>
-                  <CardTitle className="text-white">Quizzes</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Create new quiz */}
-                  <div className="p-4 bg-slate-800 rounded-lg space-y-3">
-                    <Label className="text-gray-300">Create New Quiz</Label>
-                    <Input
-                      value={newQuizTitle}
-                      onChange={(e) => setNewQuizTitle(e.target.value)}
-                      placeholder="Quiz title"
-                      className="bg-slate-700 border-white/10 text-white"
-                    />
-                    <Textarea
-                      value={newQuizDescription}
-                      onChange={(e) => setNewQuizDescription(e.target.value)}
-                      placeholder="Description (optional)"
-                      className="bg-slate-700 border-white/10 text-white"
-                      rows={2}
-                    />
-                    <Button
-                      onClick={handleCreateQuiz}
-                      disabled={!newQuizTitle.trim()}
-                      className="bg-orange-500 hover:bg-orange-600 text-white w-full"
-                    >
-                      <Plus className="w-4 h-4 mr-2" />
-                      Create Quiz
+                    <Button variant="destructive" size="icon" onClick={() => {
+                      const updatedCards = homepageFeatureCards.featureCards.filter((_, idx) => idx !== i);
+                      homepageFeatureCards.saveFeatureCards(updatedCards);
+                    }}>
+                      <Trash2 size={18} />
                     </Button>
                   </div>
+                ))}
+                <Button onClick={() => homepageFeatureCards.saveFeatureCards([...homepageFeatureCards.featureCards, { icon: '✨', title: 'New Card', description: 'New description' }])} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add Feature Card
+                </Button>
+              </div>
+            </div>
 
-                  {/* Quiz list */}
-                  {quizzesLoading ? (
-                    <p className="text-gray-400 text-sm">Loading quizzes...</p>
-                  ) : quizzes.length === 0 ? (
-                    <p className="text-gray-400 text-sm">No quizzes yet. Create one above.</p>
-                  ) : (
-                    <div className="space-y-2">
-                      {quizzes.map((quiz) => (
-                        <div
-                          key={quiz.id}
-                          className={`flex items-center justify-between p-3 rounded-lg cursor-pointer ${
-                            selectedQuiz?.id === quiz.id
-                              ? 'bg-orange-500/20 border border-orange-500'
-                              : 'bg-slate-800'
-                          }`}
-                          onClick={() => setSelectedQuiz(quiz)}
-                        >
-                          <div>
-                            <p className="text-white font-medium">{quiz.title}</p>
-                            <p className="text-gray-400 text-xs">{quiz.questions.length} questions</p>
-                          </div>
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleDeleteQuiz(quiz.id); }}
-                            className="p-1 text-red-400 hover:text-red-300"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </div>
-                      ))}
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Featured Topics</h2>
+              <div className="space-y-4">
+                {homepageFeaturedTopics.featuredTopics.map((topic, i) => (
+                  <div key={topic.id} className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={topic.title} onChange={(e) => updateFeaturedTopic(i, 'title', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Description</label>
+                      <Textarea value={topic.description} onChange={(e) => updateFeaturedTopic(i, 'description', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <ImageUpload 
+                        currentImage={topic.image_url}
+                        onImageUploaded={(url) => updateFeaturedTopic(i, 'image_url', url)}
+                        label="Image URL"
+                      />
                     </div>
-                  )}
-                </CardContent>
-              </Card>
+                    <Button variant="destructive" size="icon" onClick={() => deleteFeaturedTopic(i)}>
+                      <Trash2 size={18} />
+                    </Button>
+                  </div>
+                ))}
+                <Button onClick={addFeaturedTopic} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add Featured Topic
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
 
-              {/* Right: Question editor */}
-              {selectedQuiz && (
-                <Card className="bg-slate-900 border-white/10">
-                  <CardHeader>
-                    <div className="flex items-center justify-between">
-                      <CardTitle className="text-white">{selectedQuiz.title} — Questions</CardTitle>
-                      <Button
-                        size="sm"
-                        onClick={() => setEditingQuestion({ options: ['', '', '', ''], correctIndex: 0, sortOrder: selectedQuiz.questions.length })}
-                        className="bg-orange-500 hover:bg-orange-600 text-white"
-                      >
-                        <Plus className="w-4 h-4 mr-2" />
-                        Add Question
+          {/* ── TOPICS TAB ──────────────────────────────────────────────── */}
+          <TabsContent value="topics" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Manage Topics</h2>
+              <div className="space-y-4">
+                {topics.map((topic, i) => (
+                  <div key={topic.id} className="flex items-center gap-4 p-3 bg-slate-800 rounded-lg border border-white/10">
+                    <div className="flex flex-col gap-1">
+                      <Button variant="ghost" size="icon" onClick={() => moveTopic(i, 'up')} disabled={i === 0}><ArrowUp size={16} /></Button>
+                      <Button variant="ghost" size="icon" onClick={() => moveTopic(i, 'down')} disabled={i === topics.length - 1}><ArrowDown size={16} /></Button>
+                    </div>
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Emoji</label>
+                      <Input value={topic.emoji} onChange={(e) => handleUpdateTopic(topic.id, 'emoji', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={topic.title} onChange={(e) => handleUpdateTopic(topic.id, 'title', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Description</label>
+                      <Textarea value={topic.description || ''} onChange={(e) => handleUpdateTopic(topic.id, 'description', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                      <ImageUpload 
+                        currentImage={topic.image_url}
+                        onImageUploaded={(url) => handleUpdateTopic(topic.id, 'image_url', url)}
+                        label="Image URL"
+                      />
+                    </div>
+                    <Button variant="destructive" size="icon" onClick={() => handleDeleteTopic(topic.id)}>
+                      <Trash2 size={18} />
+                    </Button>
+                  </div>
+                ))}
+                <Button onClick={handleAddTopic} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add Topic
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── SUBTOPICS TAB ───────────────────────────────────────────── */}
+          <TabsContent value="subtopics" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Manage Subtopics</h2>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-1">Select Topic</label>
+                <select 
+                  value={selectedTopicId || ''}
+                  onChange={(e) => setSelectedTopicId(e.target.value || null)}
+                  className="w-full p-2 rounded-lg bg-slate-800 border border-white/20 text-white"
+                >
+                  <option value="">-- Select a Topic --</option>
+                  {topics.map(topic => (
+                    <option key={topic.id} value={topic.id}>{topic.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedTopicId && (
+                <div className="space-y-4 mt-4">
+                  {subtopics.map((subtopic, i) => (
+                    <div key={subtopic.id} className="flex items-center gap-4 p-3 bg-slate-800 rounded-lg border border-white/10">
+                      <div className="flex flex-col gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => moveSubtopic(i, 'up')} disabled={i === 0}><ArrowUp size={16} /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => moveSubtopic(i, 'down')} disabled={i === subtopics.length - 1}><ArrowDown size={16} /></Button>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="block text-sm text-gray-400">Emoji</label>
+                        <Input value={subtopic.emoji} onChange={(e) => handleUpdateSubtopic(subtopic.id, 'emoji', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                        <label className="block text-sm text-gray-400">Title</label>
+                        <Input value={subtopic.title} onChange={(e) => handleUpdateSubtopic(subtopic.id, 'title', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                        <label className="block text-sm text-gray-400">Description</label>
+                        <Textarea value={subtopic.description || ''} onChange={(e) => handleUpdateSubtopic(subtopic.id, 'description', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                      </div>
+                      <Button variant="destructive" size="icon" onClick={() => handleDeleteSubtopic(subtopic.id)}>
+                        <Trash2 size={18} />
                       </Button>
                     </div>
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Question form */}
-                    {editingQuestion && (
-                      <div className="p-4 bg-slate-800 rounded-lg space-y-3">
-                        <div>
-                          <Label className="text-gray-300">Question Text</Label>
-                          <Textarea
-                            value={editingQuestion.questionText || ''}
-                            onChange={(e) => setEditingQuestion({ ...editingQuestion, questionText: e.target.value })}
-                            className="bg-slate-700 border-white/10 text-white"
-                            rows={2}
-                          />
-                        </div>
-                        <div className="space-y-2">
-                          <Label className="text-gray-300">Options (select the correct one)</Label>
-                          {(editingQuestion.options || ['', '', '', '']).map((opt, i) => (
-                            <div key={i} className="flex items-center gap-2">
-                              <input
-                                type="radio"
-                                name="correctIndex"
-                                checked={editingQuestion.correctIndex === i}
-                                onChange={() => setEditingQuestion({ ...editingQuestion, correctIndex: i })}
-                                className="accent-orange-500"
-                              />
-                              <Input
-                                value={opt}
-                                onChange={(e) => updateQuestionOption(i, e.target.value)}
-                                placeholder={`Option ${i + 1}`}
-                                className="bg-slate-700 border-white/10 text-white"
-                              />
-                            </div>
-                          ))}
-                        </div>
-                        <div className="flex gap-2">
-                          <Button onClick={handleSaveQuestion} className="bg-green-600 hover:bg-green-700 text-white">
-                            <Save className="w-4 h-4 mr-2" />
-                            Save Question
-                          </Button>
-                          <Button variant="outline" onClick={() => setEditingQuestion(null)}>
-                            Cancel
-                          </Button>
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Questions list */}
-                    {selectedQuiz.questions.length === 0 ? (
-                      <p className="text-gray-400 text-sm">No questions yet. Add one above.</p>
-                    ) : (
-                      <div className="space-y-2">
-                        {selectedQuiz.questions.map((q, i) => (
-                          <div key={q.id} className="p-3 bg-slate-800 rounded-lg">
-                            <div className="flex items-start justify-between gap-2">
-                              <div className="flex-1">
-                                <p className="text-white text-sm font-medium">{i + 1}. {q.questionText}</p>
-                                <div className="mt-1 space-y-1">
-                                  {q.options.map((opt, oi) => (
-                                    <p key={oi} className={`text-xs ${oi === q.correctIndex ? 'text-green-400 font-medium' : 'text-gray-400'}`}>
-                                      {oi === q.correctIndex ? '✓' : '○'} {opt}
-                                    </p>
-                                  ))}
-                                </div>
-                              </div>
-                              <div className="flex gap-1">
-                                <button
-                                  onClick={() => setEditingQuestion(q)}
-                                  className="p-1 text-blue-400 hover:text-blue-300 text-xs"
-                                >
-                                  Edit
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteQuestion(q.id)}
-                                  className="p-1 text-red-400 hover:text-red-300"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+                  ))}
+                  <Button onClick={handleAddSubtopic} className="bg-orange-500 hover:bg-orange-600 text-white">
+                    <Plus size={18} className="mr-2" /> Add Subtopic
+                  </Button>
+                </div>
               )}
             </div>
           </TabsContent>
 
-          {/* ── Homepage Tab ─────────────────────────────────────────────────── */}
-          <TabsContent value="homepage">
-            <Card className="bg-slate-900 border-white/10">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white">Homepage Content</CardTitle>
-                  <Button onClick={handleSaveHomepage} className="bg-green-600 hover:bg-green-700 text-white">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </Button>
+          {/* ── LESSONS TAB ──────────────────────────────────────────────── */}
+          <TabsContent value="lessons" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Manage Lessons</h2>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-1">Select Topic</label>
+                <select 
+                  value={selectedTopicId || ''}
+                  onChange={(e) => {
+                    setSelectedTopicId(e.target.value || null);
+                    setSelectedSubtopicId(null); // Reset subtopic when topic changes
+                  }}
+                  className="w-full p-2 rounded-lg bg-slate-800 border border-white/20 text-white"
+                >
+                  <option value="">-- Select a Topic --</option>
+                  {topics.map(topic => (
+                    <option key={topic.id} value={topic.id}>{topic.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedTopicId && (
+                <div className="mb-4">
+                  <label className="block text-sm text-gray-400 mb-1">Select Subtopic (Lesson)</label>
+                  <select 
+                    value={selectedSubtopicId || ''}
+                    onChange={(e) => setSelectedSubtopicId(e.target.value || null)}
+                    className="w-full p-2 rounded-lg bg-slate-800 border border-white/20 text-white"
+                  >
+                    <option value="">-- Select a Subtopic --</option>
+                    {subtopics.map(subtopic => (
+                      <option key={subtopic.id} value={subtopic.id}>{subtopic.title}</option>
+                    ))}
+                  </select>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
-                <div>
-                  <Label className="text-gray-300">Hero Title</Label>
-                  <Input
-                    value={homepageForm.heroTitle}
-                    onChange={(e) => setHomepageForm({ ...homepageForm, heroTitle: e.target.value })}
-                    className="bg-slate-700 border-white/10 text-white"
-                  />
+              )}
+
+              {selectedSubtopicId && (
+                <div className="space-y-4 mt-4">
+                  <h3 className="text-lg font-bold text-white">Lesson Content</h3>
+                  {currentLessonBlocks.map((block, i) => (
+                    <div key={i} className="flex items-end gap-2 p-3 bg-slate-800 rounded-lg border border-white/10">
+                      <div className="flex flex-col gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => moveLessonBlock(i, 'up')} disabled={i === 0}><ArrowUp size={16} /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => moveLessonBlock(i, 'down')} disabled={i === currentLessonBlocks.length - 1}><ArrowDown size={16} /></Button>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="block text-sm text-gray-400">Block Type: {block.type}</label>
+                        {block.type === 'text' ? (
+                          <Textarea value={block.content} onChange={(e) => updateLessonBlock(i, e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                        ) : (
+                          <ImageUpload 
+                            currentImage={block.content}
+                            onImageUploaded={(url) => updateLessonBlock(i, url)}
+                            label="Image URL"
+                          />
+                        )}
+                      </div>
+                      <Button variant="destructive" size="icon" onClick={() => removeLessonBlock(i)}>
+                        <Trash2 size={18} />
+                      </Button>
+                    </div>
+                  ))}
+                  <div className="flex gap-2">
+                    <Button onClick={() => addLessonBlock('text')} className="bg-blue-500 hover:bg-blue-600 text-white">
+                      <FileText size={18} className="mr-2" /> Add Text Block
+                    </Button>
+                    <Button onClick={() => addLessonBlock('image')} className="bg-purple-500 hover:bg-purple-600 text-white">
+                      <ImageIcon size={18} className="mr-2" /> Add Image Block
+                    </Button>
+                  </div>
                 </div>
-                <div>
-                  <Label className="text-gray-300">Hero Subtitle</Label>
-                  <Textarea
-                    value={homepageForm.heroSubtitle}
-                    onChange={(e) => setHomepageForm({ ...homepageForm, heroSubtitle: e.target.value })}
-                    className="bg-slate-700 border-white/10 text-white"
-                  />
-                </div>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           </TabsContent>
 
-          {/* ── About Tab ────────────────────────────────────────────────────── */}
-          <TabsContent value="about">
-            <Card className="bg-slate-900 border-white/10">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white">About Page Content</CardTitle>
-                  <Button onClick={handleSaveAbout} className="bg-green-600 hover:bg-green-700 text-white">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
-                  </Button>
-                </div>
-              </CardHeader>
-              <CardContent className="space-y-6">
+          {/* ── ABOUT TAB ───────────────────────────────────────────────── */}
+          <TabsContent value="about" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">About Page Content</h2>
+              <div className="space-y-4">
                 <div>
-                  <Label className="text-gray-300">Mission Text</Label>
-                  <Textarea
-                    value={aboutForm.missionText}
-                    onChange={(e) => setAboutForm({ ...aboutForm, missionText: e.target.value })}
-                    className="bg-slate-700 border-white/10 text-white"
-                    rows={4}
-                  />
+                  <label className="block text-sm text-gray-400 mb-1">Mission Text</label>
+                  <Textarea value={aboutContent.aboutContent?.missionText || ''} onChange={(e) => handleUpdateAboutContent('missionText', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
                 </div>
                 <div>
-                  <Label className="text-gray-300">Who We Are - Paragraph 1</Label>
-                  <Textarea
-                    value={aboutForm.whoWeAreText1}
-                    onChange={(e) => setAboutForm({ ...aboutForm, whoWeAreText1: e.target.value })}
-                    className="bg-slate-700 border-white/10 text-white"
-                    rows={3}
-                  />
+                  <label className="block text-sm text-gray-400 mb-1">Who We Are Text 1</label>
+                  <Textarea value={aboutContent.aboutContent?.whoWeAreText1 || ''} onChange={(e) => handleUpdateAboutContent('whoWeAreText1', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
                 </div>
                 <div>
-                  <Label className="text-gray-300">Who We Are - Paragraph 2</Label>
-                  <Textarea
-                    value={aboutForm.whoWeAreText2}
-                    onChange={(e) => setAboutForm({ ...aboutForm, whoWeAreText2: e.target.value })}
-                    className="bg-slate-700 border-white/10 text-white"
-                    rows={3}
-                  />
+                  <label className="block text-sm text-gray-400 mb-1">Who We Are Text 2</label>
+                  <Textarea value={aboutContent.aboutContent?.whoWeAreText2 || ''} onChange={(e) => handleUpdateAboutContent('whoWeAreText2', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
                 </div>
-              </CardContent>
-            </Card>
+                <ImageUpload 
+                  currentImage={aboutContent.aboutContent?.missionImage || ''}
+                  onImageUploaded={(url) => handleUpdateAboutContent('missionImage', url)}
+                  label="Mission Image URL"
+                />
+                <ImageUpload 
+                  currentImage={aboutContent.aboutContent?.whoWeAreImage1 || ''}
+                  onImageUploaded={(url) => handleUpdateAboutContent('whoWeAreImage1', url)}
+                  label="Who We Are Image 1 URL"
+                />
+                <ImageUpload 
+                  currentImage={aboutContent.aboutContent?.whoWeAreImage2 || ''}
+                  onImageUploaded={(url) => handleUpdateAboutContent('whoWeAreImage2', url)}
+                  label="Who We Are Image 2 URL"
+                />
+              </div>
+            </div>
           </TabsContent>
 
-          {/* ── Materials Tab ────────────────────────────────────────────────── */}
-          <TabsContent value="materials">
-            <Card className="bg-slate-900 border-white/10">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <CardTitle className="text-white">Materials Content</CardTitle>
-                  <Button onClick={handleSaveMaterials} className="bg-green-600 hover:bg-green-700 text-white">
-                    <Save className="w-4 h-4 mr-2" />
-                    Save Changes
+          {/* ── MATERIALS TAB ───────────────────────────────────────────── */}
+          <TabsContent value="materials" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Gallery Images</h2>
+              <div className="space-y-4">
+                {materialsGalleryImages.galleryImages.map((img) => (
+                  <div key={img.id} className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={img.title} onChange={(e) => handleUpdateGalleryImage(img.id, 'title', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <ImageUpload 
+                        currentImage={img.url}
+                        onImageUploaded={(url) => handleUpdateGalleryImage(img.id, 'url', url)}
+                        label="Image URL"
+                      />
+                    </div>
+                    <Button variant="destructive" size="icon" onClick={() => handleDeleteGalleryImage(img.id)}>
+                      <Trash2 size={18} />
+                    </Button>
+                  </div>
+                ))}
+                <Button onClick={handleAddGalleryImage} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add Gallery Image
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Videos</h2>
+              <div className="space-y-4">
+                {materialsVideos.videos.map((video) => (
+                  <div key={video.id} className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={video.title} onChange={(e) => handleUpdateVideo(video.id, 'title', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Video URL</label>
+                      <Input value={video.url} onChange={(e) => handleUpdateVideo(video.id, 'url', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <ImageUpload 
+                        currentImage={video.thumbnail}
+                        onImageUploaded={(url) => handleUpdateVideo(video.id, 'thumbnail', url)}
+                        label="Thumbnail URL"
+                      />
+                    </div>
+                    <Button variant="destructive" size="icon" onClick={() => handleDeleteVideo(video.id)}>
+                      <Trash2 size={18} />
+                    </Button>
+                  </div>
+                ))}
+                <Button onClick={handleAddVideo} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add Video
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">PDFs</h2>
+              <div className="space-y-4">
+                {materialsPdfs.pdfs.map((pdf) => (
+                  <div key={pdf.id} className="flex items-end gap-2">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={pdf.title} onChange={(e) => handleUpdatePdf(pdf.id, 'title', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Label</label>
+                      <Input value={pdf.label} onChange={(e) => handleUpdatePdf(pdf.id, 'label', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">PDF URL</label>
+                      <Input value={pdf.url} onChange={(e) => handleUpdatePdf(pdf.id, 'url', e.target.value)} className="bg-slate-800 border-white/20 text-white" />
+                    </div>
+                    <Button variant="destructive" size="icon" onClick={() => handleDeletePdf(pdf.id)}>
+                      <Trash2 size={18} />
+                    </Button>
+                  </div>
+                ))}
+                <Button onClick={handleAddPdf} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add PDF
+                </Button>
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ── QUIZZES TAB ─────────────────────────────────────────────── */}
+          <TabsContent value="quizzes" className="space-y-8">
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Manage Quizzes</h2>
+              <div className="space-y-4">
+                {quizzes.map((quiz) => (
+                  <div key={quiz.id} className="flex items-end gap-2 p-3 bg-slate-800 rounded-lg border border-white/10">
+                    <div className="flex-1 space-y-1">
+                      <label className="block text-sm text-gray-400">Title</label>
+                      <Input value={quiz.title} onChange={(e) => handleUpdateQuiz(quiz.id, 'title', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                      <label className="block text-sm text-gray-400">Description</label>
+                      <Textarea value={quiz.description || ''} onChange={(e) => handleUpdateQuiz(quiz.id, 'description', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                    </div>
+                    <Button variant="destructive" size="icon" onClick={() => handleDeleteQuiz(quiz.id)}>
+                      <Trash2 size={18} />
+                    </Button>
+                  </div>
+                ))}
+                <Button onClick={handleAddQuiz} className="bg-orange-500 hover:bg-orange-600 text-white">
+                  <Plus size={18} className="mr-2" /> Add Quiz
+                </Button>
+              </div>
+            </div>
+
+            <div className="bg-slate-900/50 rounded-xl p-6 border border-white/10">
+              <h2 className="text-xl font-bold text-white mb-4">Manage Quiz Questions</h2>
+              <div className="mb-4">
+                <label className="block text-sm text-gray-400 mb-1">Select Quiz</label>
+                <select 
+                  value={selectedQuizId || ''}
+                  onChange={(e) => setSelectedQuizId(e.target.value || null)}
+                  className="w-full p-2 rounded-lg bg-slate-800 border border-white/20 text-white"
+                >
+                  <option value="">-- Select a Quiz --</option>
+                  {quizzes.map(quiz => (
+                    <option key={quiz.id} value={quiz.id}>{quiz.title}</option>
+                  ))}
+                </select>
+              </div>
+
+              {selectedQuizId && (
+                <div className="space-y-4 mt-4">
+                  {quizQuestions.map((question, i) => (
+                    <div key={question.id} className="flex items-end gap-2 p-3 bg-slate-800 rounded-lg border border-white/10">
+                      <div className="flex flex-col gap-1">
+                        <Button variant="ghost" size="icon" onClick={() => handleUpdateQuizQuestion(question.id, 'order_index', i - 1)} disabled={i === 0}><ArrowUp size={16} /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => handleUpdateQuizQuestion(question.id, 'order_index', i + 1)} disabled={i === quizQuestions.length - 1}><ArrowDown size={16} /></Button>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <label className="block text-sm text-gray-400">Question Text</label>
+                        <Textarea value={question.question_text} onChange={(e) => handleUpdateQuizQuestion(question.id, 'question_text', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                        <label className="block text-sm text-gray-400">Options (comma-separated)</label>
+                        <Input value={question.options.join(', ')} onChange={(e) => handleUpdateQuizQuestion(question.id, 'options', e.target.value.split(',').map(opt => opt.trim()))} className="bg-slate-700 border-white/20 text-white" />
+                        <label className="block text-sm text-gray-400">Correct Answer Index</label>
+                        <Input type="number" value={question.correct_answer} onChange={(e) => handleUpdateQuizQuestion(question.id, 'correct_answer', parseInt(e.target.value))} className="bg-slate-700 border-white/20 text-white" />
+                        <label className="block text-sm text-gray-400">Explanation</label>
+                        <Textarea value={question.explanation || ''} onChange={(e) => handleUpdateQuizQuestion(question.id, 'explanation', e.target.value)} className="bg-slate-700 border-white/20 text-white" />
+                      </div>
+                      <Button variant="destructive" size="icon" onClick={() => handleDeleteQuizQuestion(question.id)}>
+                        <Trash2 size={18} />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button onClick={handleAddQuizQuestion} className="bg-orange-500 hover:bg-orange-600 text-white">
+                    <Plus size={18} className="mr-2" /> Add Quiz Question
                   </Button>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <p className="text-gray-400">Manage gallery images, videos, and PDFs from the Supabase dashboard.</p>
-              </CardContent>
-            </Card>
+              )}
+            </div>
           </TabsContent>
         </Tabs>
       </div>
     </div>
   );
 }
-
-export default AdminPage;

@@ -1,194 +1,206 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import type { User } from '@supabase/supabase-js';
+import {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useCallback,
+  useRef,
+  type ReactNode,
+} from 'react';
 import { supabase } from '@/supabase';
-import { fetchProfile } from '@/services/profiles';
+import type { Session, User } from '@supabase/supabase-js';
 import type { UserProfile } from '@/types';
 
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
-  loading: boolean;
+  loading: boolean;          // true only during the FIRST session check
   isAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<{ needsConfirmation: boolean }>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    username?: string
+  ) => Promise<{ needsEmailConfirmation: boolean }>;
   logout: () => Promise<void>;
-  refreshProfile: () => Promise<void>;
+  // Convenience display name that is available INSTANTLY
+  displayName: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+/**
+ * Fast auth provider:
+ *  - Sets `user` immediately from the Supabase session (read from localStorage synchronously).
+ *  - Sets `loading = false` as soon as the session has been read. The UI is never blocked
+ *    waiting for the profile row.
+ *  - Fetches the profile row (for username + role/admin) in the background.
+ */
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+  const mountedRef = useRef(true);
+
+  // Derive a display name synchronously from whatever we have right now.
+  // Priority: profile.username -> user_metadata.full_name -> user_metadata.name
+  //           -> email local-part -> 'User'
+  const displayName =
+    profile?.username ||
+    (user?.user_metadata?.full_name as string | undefined) ||
+    (user?.user_metadata?.name as string | undefined) ||
+    (user?.email ? user.email.split('@')[0] : '') ||
+    'User';
 
   const isAdmin = profile?.role === 'admin';
 
-  const loadProfile = useCallback(async (userId: string) => {
-    try {
-      const profileData = await fetchProfile(userId);
-      setProfile(profileData);
-    } catch (error) {
-      console.error('Error loading profile:', error);
-      setProfile(null);
+  // --- Profile fetch (background, non-blocking) --------------------------------
+  const fetchProfile = useCallback(async (userId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('id, username, email, role, created_at, updated_at')
+      .eq('id', userId)
+      .maybeSingle();
+
+    if (!mountedRef.current) return;
+
+    if (error) {
+      // Most common cause: the `profiles` row has not been created yet (e.g.
+      // trigger delay). We simply leave profile=null; the UI still works
+      // because displayName falls back to user_metadata / email prefix.
+      console.warn('Profile fetch warning:', error.message);
+      return;
+    }
+    if (data) {
+      setProfile(data as UserProfile);
     }
   }, []);
 
-  // Load profile asynchronously without blocking auth state
-  const loadProfileAsync = useCallback((userId: string) => {
-    loadProfile(userId).catch(error => {
-      console.error('Error loading profile asynchronously:', error);
-    });
-  }, [loadProfile]);
+  // Handle a session change from anywhere (init, login, logout, token refresh)
+  const applySession = useCallback(
+    (session: Session | null) => {
+      const nextUser = session?.user ?? null;
+      setUser(nextUser);
 
+      if (nextUser) {
+        // Fire-and-forget. Do NOT await — the UI must render immediately.
+        fetchProfile(nextUser.id);
+      } else {
+        setProfile(null);
+      }
+    },
+    [fetchProfile]
+  );
+
+  // --- Init + listener ---------------------------------------------------------
   useEffect(() => {
-    // Check for existing session on mount
-    const checkSession = async () => {
-      try {
-        const { data: { session } } = await supabase.auth.getSession();
-        
-        if (session?.user) {
-          setUser(session.user);
-          // Load profile asynchronously in the background
-          loadProfileAsync(session.user.id);
-        }
-      } catch (error) {
-        console.error('Error checking session:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
+    mountedRef.current = true;
 
-    checkSession();
+    // 1) Read the stored session synchronously-ish. getSession() does not hit
+    //    the network; it reads from localStorage, so it resolves in a few ms.
+    supabase.auth
+      .getSession()
+      .then(({ data }) => {
+        if (!mountedRef.current) return;
+        applySession(data.session ?? null);
+      })
+      .catch((e) => console.error('getSession error:', e))
+      .finally(() => {
+        if (mountedRef.current) setLoading(false);
+      });
 
-    // Subscribe to auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        if (event === 'SIGNED_IN' && session?.user) {
-          setUser(session.user);
-          // Load profile asynchronously in the background without blocking
-          loadProfileAsync(session.user.id);
-        } else if (event === 'SIGNED_OUT') {
-          setUser(null);
-          setProfile(null);
-        } else if (event === 'TOKEN_REFRESHED' && session?.user) {
-          setUser(session.user);
-        }
-      }
-    );
+    // 2) Subscribe to any future auth state changes (login, logout, refresh,
+    //    OAuth redirect callback). These must also be instant — again we do
+    //    not await the profile fetch.
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
+      applySession(session);
+      // After the first init the listener may fire again; keep loading false.
+      if (mountedRef.current) setLoading(false);
+    });
 
     return () => {
-      subscription.unsubscribe();
+      mountedRef.current = false;
+      sub.subscription.unsubscribe();
     };
-  }, [loadProfileAsync]);
+  }, [applySession]);
 
-  const signInWithGoogle = async () => {
-    // Use production URL if available, otherwise fall back to current origin
-    const redirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
+  // --- Actions -----------------------------------------------------------------
+  const signInWithGoogle = useCallback(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
-      options: {
-        redirectTo: redirectUrl,
-      },
+      options: { redirectTo: window.location.origin },
     });
+    if (error) throw error;
+  }, []);
 
-    if (error) {
-      console.error('Error signing in with Google:', error);
-      throw error;
-    }
+  const signInWithEmail = useCallback(
+    async (email: string, password: string) => {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (error) throw error;
+      // Apply immediately so the UI updates without waiting for the listener.
+      applySession(data.session ?? null);
+    },
+    [applySession]
+  );
 
-    // Note: Profile will be loaded automatically by onAuthStateChange listener
-    // when the OAuth callback redirects back to the app
-  };
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string, username?: string) => {
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: username ? { username, full_name: username } : undefined,
+          emailRedirectTo: window.location.origin,
+        },
+      });
+      if (error) throw error;
 
-  const signInWithEmail = async (email: string, password: string) => {
-    const { error, data } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
+      if (data.session) {
+        // Email confirmation is disabled in Supabase → we already have a
+        // session. Apply it immediately so the user is signed in RIGHT NOW.
+        applySession(data.session);
+        return { needsEmailConfirmation: false };
+      }
+      // Email confirmation is required (default Supabase setting).
+      return { needsEmailConfirmation: true };
+    },
+    [applySession]
+  );
 
-    if (error) {
-      console.error('Error signing in with email:', error);
-      throw error;
-    }
-
-    // Load profile asynchronously after successful sign-in
-    if (data?.user) {
-      loadProfileAsync(data.user.id);
-    }
-  };
-
-  const signUpWithEmail = async (email: string, password: string) => {
-    // Use production URL if available, otherwise fall back to current origin
-    const redirectUrl = import.meta.env.VITE_AUTH_REDIRECT_URL || window.location.origin;
-    const { error, data } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: redirectUrl,
-      },
-    });
-
-    if (error) {
-      console.error('Error signing up with email:', error);
-      throw error;
-    }
-
-    // Load profile asynchronously if user is immediately authenticated (no confirmation required)
-    if (data?.user && data?.session) {
-      loadProfileAsync(data.user.id);
-    }
-
-    // Check if email confirmation is required
-    const { data: { session } } = await supabase.auth.getSession();
-    return { needsConfirmation: !session };
-  };
-
-  // BUG 7 FIX: Do NOT touch localStorage for app data. Supabase manages its own
-  // session storage internally — removing a hand-picked key is both unnecessary
-  // and can corrupt the library's internal state. We only clear our own
-  // in-memory React state here.
-  const logout = async () => {
-    try {
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error("Error during signOut:", error);
-    } finally {
-      // Always clear local state even if signOut fails
-      setUser(null);
-      setProfile(null);
-    }
-  };
-  const refreshProfile = async () => {
-    if (user?.id) {
-      await loadProfile(user.id);
-    }
-  };
-
-  const value: AuthContextType = {
-    user,
-    profile,
-    loading,
-    isAdmin,
-    signInWithGoogle,
-    signInWithEmail,
-    signUpWithEmail,
-    logout,
-    refreshProfile,
-  };
+  const logout = useCallback(async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
+    // Clear local state immediately so the UI reacts without waiting.
+    setUser(null);
+    setProfile(null);
+  }, []);
 
   return (
-    <AuthContext.Provider value={value}>
+    <AuthContext.Provider
+      value={{
+        user,
+        profile,
+        loading,
+        isAdmin,
+        displayName,
+        signInWithGoogle,
+        signInWithEmail,
+        signUpWithEmail,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
 }
 
 export function useAuth() {
-  const context = useContext(AuthContext);
-  if (context === undefined) {
+  const ctx = useContext(AuthContext);
+  if (ctx === undefined)
     throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
+  return ctx;
 }
