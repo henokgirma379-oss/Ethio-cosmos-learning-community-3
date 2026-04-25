@@ -14,7 +14,9 @@ import type { UserProfile } from '@/types';
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
-  loading: boolean;          // true only during the FIRST session check
+  loading: boolean;          // Legacy loading state (for backward compatibility)
+  authReady: boolean;        // true once session is confirmed (near-instant)
+  profileLoading: boolean;   // true while fetching DB profile
   isAdmin: boolean;
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
@@ -24,28 +26,19 @@ interface AuthContextType {
     username?: string
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   logout: () => Promise<void>;
-  // Convenience display name that is available INSTANTLY
   displayName: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-/**
- * Fast auth provider:
- *  - Sets `user` immediately from the Supabase session (read from localStorage synchronously).
- *  - Sets `loading = false` as soon as the session has been read. The UI is never blocked
- *    waiting for the profile row.
- *  - Fetches the profile row (for username + role/admin) in the background.
- */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [authReady, setAuthReady] = useState(false);
+  const [profileLoading, setProfileLoading] = useState(false);
   const mountedRef = useRef(true);
 
-  // Derive a display name synchronously from whatever we have right now.
-  // Priority: profile.username -> user_metadata.full_name -> user_metadata.name
-  //           -> email local-part -> 'User'
+  // Derive a display name synchronously.
   const displayName =
     profile?.username ||
     (user?.user_metadata?.full_name as string | undefined) ||
@@ -55,68 +48,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const isAdmin = profile?.role === 'admin';
 
-  // --- Profile fetch (background, non-blocking) --------------------------------
   const fetchProfile = useCallback(async (userId: string) => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, username, email, role, created_at, updated_at')
-      .eq('id', userId)
-      .maybeSingle();
+    setProfileLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, username, email, role, created_at, updated_at')
+        .eq('id', userId)
+        .maybeSingle();
 
-    if (!mountedRef.current) return;
+      if (!mountedRef.current) return;
 
-    if (error) {
-      // Most common cause: the `profiles` row has not been created yet (e.g.
-      // trigger delay). We simply leave profile=null; the UI still works
-      // because displayName falls back to user_metadata / email prefix.
-      console.warn('Profile fetch warning:', error.message);
-      return;
-    }
-    if (data) {
-      setProfile(data as UserProfile);
+      if (error) {
+        console.warn('Profile fetch warning:', error.message);
+        return;
+      }
+      if (data) {
+        setProfile(data as UserProfile);
+      }
+    } finally {
+      if (mountedRef.current) setProfileLoading(false);
     }
   }, []);
 
-  // Handle a session change from anywhere (init, login, logout, token refresh)
   const applySession = useCallback(
     (session: Session | null) => {
       const nextUser = session?.user ?? null;
       setUser(nextUser);
 
       if (nextUser) {
-        // Fire-and-forget. Do NOT await — the UI must render immediately.
+        // Build optimistic profile from metadata
+        const metadata = nextUser.user_metadata;
+        const optimisticProfile: UserProfile = {
+          id: nextUser.id,
+          email: nextUser.email || '',
+          username: metadata?.full_name || metadata?.name || (nextUser.email ? nextUser.email.split('@')[0] : 'User'),
+          role: 'user', // Default to user until DB confirms
+          created_at: nextUser.created_at,
+          updated_at: new Date().toISOString(),
+        };
+        setProfile(optimisticProfile);
+        
+        // Fetch real profile in background
         fetchProfile(nextUser.id);
       } else {
         setProfile(null);
       }
+      setAuthReady(true);
     },
     [fetchProfile]
   );
 
-  // --- Init + listener ---------------------------------------------------------
   useEffect(() => {
     mountedRef.current = true;
 
-    // 1) Read the stored session synchronously-ish. getSession() does not hit
-    //    the network; it reads from localStorage, so it resolves in a few ms.
     supabase.auth
       .getSession()
       .then(({ data }) => {
         if (!mountedRef.current) return;
         applySession(data.session ?? null);
       })
-      .catch((e) => console.error('getSession error:', e))
-      .finally(() => {
-        if (mountedRef.current) setLoading(false);
+      .catch((e) => {
+        console.error('getSession error:', e);
+        if (mountedRef.current) setAuthReady(true);
       });
 
-    // 2) Subscribe to any future auth state changes (login, logout, refresh,
-    //    OAuth redirect callback). These must also be instant — again we do
-    //    not await the profile fetch.
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {
-      applySession(session);
-      // After the first init the listener may fire again; keep loading false.
-      if (mountedRef.current) setLoading(false);
+    const { data: sub } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
+        applySession(session);
+      } else if (event === 'SIGNED_OUT') {
+        setUser(null);
+        setProfile(null);
+        setAuthReady(true);
+      }
     });
 
     return () => {
@@ -125,7 +129,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [applySession]);
 
-  // --- Actions -----------------------------------------------------------------
   const signInWithGoogle = useCallback(async () => {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
@@ -141,7 +144,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         password,
       });
       if (error) throw error;
-      // Apply immediately so the UI updates without waiting for the listener.
       applySession(data.session ?? null);
     },
     [applySession]
@@ -160,23 +162,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) throw error;
 
       if (data.session) {
-        // Email confirmation is disabled in Supabase → we already have a
-        // session. Apply it immediately so the user is signed in RIGHT NOW.
         applySession(data.session);
         return { needsEmailConfirmation: false };
       }
-      // Email confirmation is required (default Supabase setting).
       return { needsEmailConfirmation: true };
     },
     [applySession]
   );
 
   const logout = useCallback(async () => {
-    const { error } = await supabase.auth.signOut();
-    if (error) throw error;
-    // Clear local state immediately so the UI reacts without waiting.
-    setUser(null);
-    setProfile(null);
+    try {
+      // Remove all realtime subscriptions first to prevent signOut from hanging
+      await supabase.removeAllChannels();
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error during signOut:', error);
+    } finally {
+      setUser(null);
+      setProfile(null);
+    }
   }, []);
 
   return (
@@ -184,7 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         user,
         profile,
-        loading,
+        loading: !authReady, // Map legacy loading to authReady
+        authReady,
+        profileLoading,
         isAdmin,
         displayName,
         signInWithGoogle,

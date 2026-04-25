@@ -33,14 +33,16 @@ export default function Navbar() {
         setProfileMenuOpen(false);
       }
     };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
+    // Changed from 'mousedown' to 'click' to prevent dropdown from closing before button onClick fires
+    document.addEventListener('click', handleClickOutside);
+    return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
   const handleLogout = async () => {
     try {
       await logout();
       setProfileMenuOpen(false);
+      setMobileMenuOpen(false);
       navigate('/login');
     } catch (error) {
       console.error('Logout error:', error);
@@ -54,13 +56,10 @@ export default function Navbar() {
     return location.pathname.startsWith(path);
   };
 
-  // Helper to safely access user metadata (avatar_url only - everything else
-  // comes from the `displayName` helper which is ready INSTANTLY on login).
   const metadata = user?.user_metadata as
     | { avatar_url?: string; full_name?: string; name?: string }
     | undefined;
 
-  // First letter for avatar fallback, shown as soon as the user state exists.
   const avatarLetter = (displayName || 'U').trim().charAt(0).toUpperCase();
 
   return (
@@ -80,128 +79,131 @@ export default function Navbar() {
               </span>
             </Link>
 
-	            {/* Desktop Navigation (Main) */}
-	            <div className="hidden lg:flex items-center gap-1">
-	              {publicNavLinks.map((link) => (
-	                <Link
-	                  key={link.path}
-	                  to={link.path}
-	                  className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
-	                    isActive(link.path)
-	                      ? 'text-orange-500 bg-orange-500/10'
-	                      : 'text-gray-300 hover:text-white hover:bg-white/5'
-	                  }`}
-	                >
-	                  {link.label}
-	                </Link>
-	              ))}
-	              {user && (
-	                <>
-	                  {privateNavLinks.map((link) => (
-	                    <Link
-	                      key={link.path}
-	                      to={link.path}
-	                      className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
-	                        isActive(link.path)
-	                          ? 'text-orange-500 bg-orange-500/10'
-	                          : 'text-gray-300 hover:text-white hover:bg-white/5'
-	                      }`}
-	                    >
-	                      {link.label}
-	                    </Link>
-	                  ))}
-	                  {isAdmin && (
-	                    <Link
-	                      to="/admin"
-	                      className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
-	                        isActive('/admin')
-	                          ? 'text-orange-500 bg-orange-500/10'
-	                          : 'text-gray-300 hover:text-white hover:bg-white/5'
-	                      }`}
-	                    >
-	                      Admin
-	                    </Link>
-	                  )}
-	                </>
-	              )}
-	            </div>
+            {/* Desktop Navigation (Main) */}
+            <div className="hidden lg:flex items-center gap-1">
+              {publicNavLinks.map((link) => (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+                    isActive(link.path)
+                      ? 'text-orange-500 bg-orange-500/10'
+                      : 'text-gray-300 hover:text-white hover:bg-white/5'
+                  }`}
+                >
+                  {link.label}
+                </Link>
+              ))}
+              {user && (
+                <>
+                  {privateNavLinks.map((link) => (
+                    <Link
+                      key={link.path}
+                      to={link.path}
+                      className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+                        isActive(link.path)
+                          ? 'text-orange-500 bg-orange-500/10'
+                          : 'text-gray-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      {link.label}
+                    </Link>
+                  ))}
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      className={`px-3 py-2 text-sm font-medium transition-colors rounded-md ${
+                        isActive('/admin')
+                          ? 'text-orange-500 bg-orange-500/10'
+                          : 'text-gray-300 hover:text-white hover:bg-white/5'
+                      }`}
+                    >
+                      Admin
+                    </Link>
+                  )}
+                </>
+              )}
+            </div>
 
-	            {/* Right side - User Profile / Login */}
-	            <div className="flex items-center gap-2">
-	              {user ? (
-	                <div className="relative" ref={profileMenuRef}>
-	                  <button
-	                    onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-	                    className="flex items-center gap-2 p-1 rounded-full border border-white/10 hover:bg-white/5 transition-colors"
-	                  >
-	                    {metadata?.avatar_url ? (
-	                      <img 
-	                        src={metadata.avatar_url} 
-	                        alt="Profile" 
-	                        className="w-8 h-8 rounded-full border border-orange-500/50" 
-	                      />
-	                    ) : (
-	                      <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500 font-semibold text-sm">
-	                        {avatarLetter}
-	                      </div>
-	                    )}
-	                    <span className="text-gray-300 text-sm hidden md:inline max-w-[120px] truncate">
-	                      {displayName}
-	                    </span>
-	                  </button>
-	
-	                  {/* Profile Dropdown */}
-	                  {profileMenuOpen && (
-	                    <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-white/10 rounded-lg shadow-xl py-2 z-[60]">
-	                      <div className="px-4 py-2 border-b border-white/5 mb-2">
-	                        <p className="text-sm font-medium text-white truncate">
-	                          {displayName}
-	                        </p>
-	                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
-	                      </div>
-	                      <Link
-	                        to="/progress"
-	                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
-	                        onClick={() => setProfileMenuOpen(false)}
-	                      >
-	                        <BarChart3 size={16} />
-	                        My Progress
-	                      </Link>
-	                      <Link
-	                        to="/bookmarks"
-	                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
-	                        onClick={() => setProfileMenuOpen(false)}
-	                      >
-	                        <BookOpen size={16} />
-	                        Bookmarks
-	                      </Link>
-	                      {isAdmin && (
-	                        <Link
-	                          to="/admin"
-	                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
-	                          onClick={() => setProfileMenuOpen(false)}
-	                        >
-	                          <Settings size={16} />
-	                          Admin Panel
-	                        </Link>
-	                      )}
-	                      <button
-	                        onClick={handleLogout}
-	                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2 border-t border-white/5 pt-2"
-	                      >
-	                        <LogOut size={16} />
-	                        Sign Out
-	                      </button>
-	                    </div>
-	                  )}
-	                </div>
-	              ) : (
-	                <Link to="/login">
-	                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white">
-	                    Sign Up
-	                  </Button>
-	                </Link>
-	              )}
+            {/* Right side - User Profile / Login */}
+            <div className="flex items-center gap-2">
+              {user ? (
+                <div className="relative" ref={profileMenuRef}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation(); // Prevent immediate close from document click listener
+                      setProfileMenuOpen(!profileMenuOpen);
+                    }}
+                    className="flex items-center gap-2 p-1 rounded-full border border-white/10 hover:bg-white/5 transition-colors"
+                  >
+                    {metadata?.avatar_url ? (
+                      <img 
+                        src={metadata.avatar_url} 
+                        alt="Profile" 
+                        className="w-8 h-8 rounded-full border border-orange-500/50" 
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-orange-500/20 flex items-center justify-center text-orange-500 font-semibold text-sm">
+                        {avatarLetter}
+                      </div>
+                    )}
+                    <span className="text-gray-300 text-sm hidden md:inline max-w-[120px] truncate">
+                      {displayName}
+                    </span>
+                  </button>
+
+                  {/* Profile Dropdown */}
+                  {profileMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-48 bg-slate-900 border border-white/10 rounded-lg shadow-xl py-2 z-[60]">
+                      <div className="px-4 py-2 border-b border-white/5 mb-2">
+                        <p className="text-sm font-medium text-white truncate">
+                          {displayName}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                      </div>
+                      <Link
+                        to="/progress"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                        onClick={() => setProfileMenuOpen(false)}
+                      >
+                        <BarChart3 size={16} />
+                        My Progress
+                      </Link>
+                      <Link
+                        to="/bookmarks"
+                        className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                        onClick={() => setProfileMenuOpen(false)}
+                      >
+                        <BookOpen size={16} />
+                        Bookmarks
+                      </Link>
+                      {isAdmin && (
+                        <Link
+                          to="/admin"
+                          className="flex items-center gap-2 px-4 py-2 text-sm text-gray-300 hover:bg-white/5 hover:text-white transition-colors"
+                          onClick={() => setProfileMenuOpen(false)}
+                        >
+                          <Settings size={16} />
+                          Admin Panel
+                        </Link>
+                      )}
+                      <button
+                        onClick={handleLogout}
+                        className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-400 hover:bg-red-500/10 transition-colors mt-2 border-t border-white/5 pt-2"
+                      >
+                        <LogOut size={16} />
+                        Sign Out
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link to="/login">
+                  <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white">
+                    Sign Up
+                  </Button>
+                </Link>
+              )}
 
               {/* Mobile menu button */}
               <button
@@ -301,7 +303,15 @@ export default function Navbar() {
                 Admin
               </Link>
             )}
-            {!user && (
+            {user ? (
+              <button
+                onClick={handleLogout}
+                className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-red-400 hover:bg-red-500/10 rounded-md mt-2 border-t border-white/5 pt-4"
+              >
+                <LogOut size={16} />
+                Sign Out
+              </button>
+            ) : (
               <Link
                 to="/login"
                 className="px-3 py-2 text-sm font-medium text-orange-500 hover:bg-orange-500/10 rounded-md mt-2"
