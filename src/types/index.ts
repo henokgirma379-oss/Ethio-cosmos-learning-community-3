@@ -90,6 +90,17 @@ export interface PdfItem {
   label: string;
 }
 
+// Shape of the `about_content` row in `site_content`. Matches the JSON
+// stored in Supabase and the form fields rendered in AdminPage.
+export interface AboutContent {
+  missionText: string;
+  whoWeAreText1: string;
+  whoWeAreText2: string;
+  missionImage: string;
+  whoWeAreImage1: string;
+  whoWeAreImage2: string;
+}
+
 // New types for Quizzes
 export interface Quiz {
   id: string;

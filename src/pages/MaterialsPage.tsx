@@ -1,17 +1,20 @@
 import { useState } from 'react';
 import { Download, ExternalLink, Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useData } from '@/context/DataContext';
+import { useCms } from '@/context/CmsContext';
 import { FallbackImage } from '@/components/MediaFallback';
 
 export function MaterialsPage() {
-  const { materials } = useData();
+  const { materialsGalleryImages, materialsVideos, materialsPdfs } = useCms();
+  const galleryImages = materialsGalleryImages.galleryImages;
+  const videos = materialsVideos.videos;
+  const pdfs = materialsPdfs.pdfs;
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
 
   return (
     <div className="min-h-screen bg-[#050810]">
       {/* Hero Section */}
-      <section 
+      <section
         className="relative py-24"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(10, 14, 26, 0.7), rgba(5, 8, 16, 0.95)), url(/images/materials-hero.jpg)`,
@@ -35,14 +38,14 @@ export function MaterialsPage() {
           <h2 className="text-2xl font-bold text-white mb-8">
             Photo Gallery
           </h2>
-          
-          {materials.galleryImages.length === 0 ? (
+
+          {galleryImages.length === 0 ? (
             <p className="text-gray-400 text-center py-8">
               No gallery images available yet.
             </p>
           ) : (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {materials.galleryImages.map((image) => (
+              {galleryImages.map((image) => (
                 <button
                   key={image.id}
                   onClick={() => setSelectedImage(image.url)}
@@ -50,11 +53,11 @@ export function MaterialsPage() {
                 >
                   <FallbackImage
                     src={image.url}
-                    alt={image.caption}
+                    alt={image.title}
                     className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                   />
                   <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-end p-4">
-                    <span className="text-white text-sm">{image.caption}</span>
+                    <span className="text-white text-sm">{image.title}</span>
                   </div>
                 </button>
               ))}
@@ -69,14 +72,14 @@ export function MaterialsPage() {
           <h2 className="text-2xl font-bold text-white mb-8">
             Videos
           </h2>
-          
-          {materials.videos.length === 0 ? (
+
+          {videos.length === 0 ? (
             <p className="text-gray-400 text-center py-8">
               No videos available yet.
             </p>
           ) : (
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {materials.videos.map((video) => (
+              {videos.map((video) => (
                 <a
                   key={video.id}
                   href={video.url}
@@ -114,14 +117,14 @@ export function MaterialsPage() {
           <h2 className="text-2xl font-bold text-white mb-8">
             Downloadable Resources
           </h2>
-          
-          {materials.pdfs.length === 0 ? (
+
+          {pdfs.length === 0 ? (
             <p className="text-gray-400 text-center py-8">
               No downloads available yet.
             </p>
           ) : (
             <div className="space-y-4">
-              {materials.pdfs.map((pdf) => (
+              {pdfs.map((pdf) => (
                 <div
                   key={pdf.id}
                   className="flex items-center justify-between p-4 bg-slate-900 border border-white/10 rounded-xl hover:border-orange-500/30 transition-all"
@@ -167,7 +170,7 @@ export function MaterialsPage() {
 
       {/* Image Lightbox */}
       {selectedImage && (
-        <div 
+        <div
           className="fixed inset-0 z-50 bg-black/95 flex items-center justify-center p-4"
           onClick={() => setSelectedImage(null)}
         >

@@ -1,14 +1,14 @@
-
 import { Link } from 'react-router-dom';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useData } from '@/context/DataContext';
+import { useCms } from '@/context/CmsContext';
 import { FallbackImage } from '@/components/MediaFallback';
 
 export function LearningPage() {
-  const { topics, dataLoading, dataError } = useData();
+  const { topics: topicsHook } = useCms();
+  const { topics, loading, error } = topicsHook;
 
-  if (dataLoading) {
+  if (loading) {
     return (
       <div className="min-h-screen bg-[#050810] flex items-center justify-center">
         <div className="text-center">
@@ -23,7 +23,7 @@ export function LearningPage() {
   return (
     <div className="min-h-screen bg-[#050810]">
       {/* Hero Section */}
-      <section 
+      <section
         className="relative py-24"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(10, 14, 26, 0.8), rgba(5, 8, 16, 0.95)), url(/images/learning-hero.jpg)`,
@@ -39,7 +39,7 @@ export function LearningPage() {
             Explore the Universe
           </h1>
           <p className="text-xl text-gray-300 max-w-2xl mx-auto mb-6">
-            From the basics of stargazing to the mysteries of black holes, 
+            From the basics of stargazing to the mysteries of black holes,
             discover the wonders of astronomy through our structured lessons.
           </p>
           <div className="flex items-center justify-center gap-4 text-sm text-gray-400">
@@ -56,10 +56,10 @@ export function LearningPage() {
       {/* Topics Grid */}
       <section className="py-16">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {dataError ? (
+          {error ? (
             <div className="text-center py-16 bg-red-500/10 border border-red-500/20 rounded-xl">
               <p className="text-red-400 font-semibold mb-2">Could not load topics</p>
-              <p className="text-gray-400 text-sm mb-4">{dataError}</p>
+              <p className="text-gray-400 text-sm mb-4">{error}</p>
               <p className="text-gray-500 text-xs">Please try refreshing the page or contact support if the problem persists.</p>
             </div>
           ) : topics.length === 0 ? (
@@ -71,12 +71,12 @@ export function LearningPage() {
               {topics.map((topic) => (
                 <Link
                   key={topic.id}
-                  to={`/learning/${topic.slug}`}
+                  to={`/learning/${topic.id}`}
                   className="group relative overflow-hidden rounded-xl bg-slate-900 border border-white/10 hover:border-orange-500/50 transition-all duration-300"
                 >
                   <div className="h-40 overflow-hidden">
                     <FallbackImage
-                      src={topic.imageUrl || `/images/topic-${topic.slug}.jpg`}
+                      src={topic.image_url || '/images/topic-fundamentals.jpg'}
                       alt={topic.title}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                     />
@@ -91,11 +91,7 @@ export function LearningPage() {
                     <p className="text-gray-400 text-sm mb-4 line-clamp-2">
                       {topic.description || `Learn about ${topic.title.toLowerCase()} and explore the wonders of the cosmos.`}
                     </p>
-                    <div className="flex items-center justify-between">
-                      <span className="flex items-center gap-1 text-sm text-gray-500">
-                        <BookOpen className="w-4 h-4" />
-                        {topic.lessonCount} lessons
-                      </span>
+                    <div className="flex items-center justify-end">
                       <ArrowRight className="w-5 h-5 text-orange-500 opacity-0 group-hover:opacity-100 transform translate-x-0 group-hover:translate-x-1 transition-all" />
                     </div>
                   </div>

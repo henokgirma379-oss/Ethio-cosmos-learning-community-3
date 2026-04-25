@@ -15,7 +15,7 @@ import {
 } from '@/services/cms';
 import type {
   Topic, Subtopic, Lesson, FeaturedTopic, FeatureCard, GalleryImage, VideoItem, PdfItem,
-  Quiz, QuizQuestion
+  Quiz, QuizQuestion, AboutContent
 } from '@/types';
 
 // --- Homepage Hooks ---
@@ -129,7 +129,7 @@ export function useHomepageFeaturedTopics() {
 
 // --- About Page Hooks ---
 export function useAboutContent() {
-  const [aboutContent, setAboutContent] = useState<any>(null);
+  const [aboutContent, setAboutContent] = useState<AboutContent | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -149,7 +149,7 @@ export function useAboutContent() {
     fetchContent();
   }, []);
 
-  const saveAboutContent = useCallback(async (newContent: any) => {
+  const saveAboutContent = useCallback(async (newContent: AboutContent) => {
     try {
       setError(null);
       await updateAboutContent(newContent);

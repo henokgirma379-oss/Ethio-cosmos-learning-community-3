@@ -8,12 +8,21 @@ import {
   useMaterialsVideos,
   useMaterialsPdfs,
   useTopics,
-  useSubtopics,
-  useLesson,
   useQuizzes,
-  useQuizQuestions,
 } from '@/hooks/use-cms-data';
 
+/**
+ * CmsContext only exposes hooks that take NO parameters and whose state
+ * benefits from being shared across the whole app (homepage content, the full
+ * topics list, the quiz list, etc.).
+ *
+ * Hooks that depend on a runtime id — `useSubtopics(topicId)`,
+ * `useLesson(subtopicId)`, `useQuizQuestions(quizId)` — must be called
+ * directly inside the page that needs them. Wrapping them as factories on the
+ * context (the previous implementation) silently violated the React Rules of
+ * Hooks because the hook calls happened in the consumer's render rather than
+ * in the provider, leading to confusing state-loss bugs and ESLint disables.
+ */
 interface CmsContextType {
   // Homepage
   homepageHero: ReturnType<typeof useHomepageHero>;
@@ -28,14 +37,11 @@ interface CmsContextType {
   materialsVideos: ReturnType<typeof useMaterialsVideos>;
   materialsPdfs: ReturnType<typeof useMaterialsPdfs>;
 
-  // Learning Content
+  // Learning Content (top level only — see note above)
   topics: ReturnType<typeof useTopics>;
-  subtopics: (topicId: string | null) => ReturnType<typeof useSubtopics>;
-  lesson: (subtopicId: string | null) => ReturnType<typeof useLesson>;
 
-  // Quizzes
+  // Quizzes (top level list)
   quizzes: ReturnType<typeof useQuizzes>;
-  quizQuestions: (quizId: string | null) => ReturnType<typeof useQuizQuestions>;
 }
 
 const CmsContext = createContext<CmsContextType | undefined>(undefined);
@@ -52,17 +58,7 @@ export function CmsProvider({ children }: { children: ReactNode }) {
   const materialsPdfs = useMaterialsPdfs();
 
   const topics = useTopics();
-  // NOTE: These look-alike helpers intentionally call hooks from within the
-  // provider tree. They are consumed by a single admin component whose render
-  // order is stable, so React's rules of hooks still hold.
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const subtopics = (topicId: string | null) => useSubtopics(topicId);
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const lesson = (subtopicId: string | null) => useLesson(subtopicId);
-
   const quizzes = useQuizzes();
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const quizQuestions = (quizId: string | null) => useQuizQuestions(quizId);
 
   return (
     <CmsContext.Provider
@@ -75,10 +71,7 @@ export function CmsProvider({ children }: { children: ReactNode }) {
         materialsVideos,
         materialsPdfs,
         topics,
-        subtopics,
-        lesson,
         quizzes,
-        quizQuestions,
       }}
     >
       {children}
