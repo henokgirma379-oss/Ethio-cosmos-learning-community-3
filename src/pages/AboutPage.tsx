@@ -1,14 +1,24 @@
-
 import { FallbackImage } from '@/components/MediaFallback';
-import { useData } from '@/context/DataContext';
+import { useCms } from '@/context/CmsContext';
+import type { AboutContent } from '@/types';
+
+const ABOUT_FALLBACK: AboutContent = {
+  missionText: '',
+  whoWeAreText1: '',
+  whoWeAreText2: '',
+  missionImage: '',
+  whoWeAreImage1: '',
+  whoWeAreImage2: '',
+};
 
 export function AboutPage() {
-  const { about } = useData();
+  const { aboutContent } = useCms();
+  const about: AboutContent = aboutContent.aboutContent ?? ABOUT_FALLBACK;
 
   return (
     <div className="min-h-screen bg-[#050810]">
       {/* Hero Section */}
-      <section 
+      <section
         className="relative py-24"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(10, 14, 26, 0.7), rgba(5, 8, 16, 0.95)), url(/images/about-hero.jpg)`,
@@ -36,7 +46,7 @@ export function AboutPage() {
               </h2>
               <div className="w-16 h-1 bg-orange-500 mb-6" />
               <p className="text-gray-300 text-lg leading-relaxed">
-                {about.missionText || 
+                {about.missionText ||
                   'Our mission is to make astronomy education accessible to everyone in Ethiopia and beyond. We believe that understanding the cosmos inspires curiosity, critical thinking, and a deeper appreciation for our place in the universe.'}
               </p>
             </div>
@@ -57,7 +67,7 @@ export function AboutPage() {
           <h2 className="text-3xl font-bold text-white mb-12 text-center">
             Who We Are
           </h2>
-          
+
           <div className="grid md:grid-cols-2 gap-8 mb-12">
             <div className="rounded-xl overflow-hidden">
               <FallbackImage
@@ -77,11 +87,11 @@ export function AboutPage() {
 
           <div className="grid md:grid-cols-2 gap-8">
             <p className="text-gray-300 leading-relaxed">
-              {about.whoWeAreText1 || 
+              {about.whoWeAreText1 ||
                 'Ethio-Cosmos is a community-driven platform created by passionate astronomers, educators, and developers who want to share their love for the stars with the world.'}
             </p>
             <p className="text-gray-300 leading-relaxed">
-              {about.whoWeAreText2 || 
+              {about.whoWeAreText2 ||
                 'We combine modern educational techniques with Ethiopia\'s rich astronomical heritage to create a unique learning experience that honors both science and culture.'}
             </p>
           </div>
@@ -94,7 +104,7 @@ export function AboutPage() {
           <h2 className="text-3xl font-bold text-white mb-12 text-center">
             Our Values
           </h2>
-          
+
           <div className="grid md:grid-cols-3 gap-8">
             <div className="text-center p-6">
               <div className="text-4xl mb-4">📚</div>
@@ -105,7 +115,7 @@ export function AboutPage() {
                 We believe in making quality astronomy education accessible to everyone, regardless of background.
               </p>
             </div>
-            
+
             <div className="text-center p-6">
               <div className="text-4xl mb-4">🤝</div>
               <h3 className="text-xl font-semibold text-white mb-2">
@@ -115,7 +125,7 @@ export function AboutPage() {
                 Our platform thrives on the contributions and engagement of our passionate community.
               </p>
             </div>
-            
+
             <div className="text-center p-6">
               <div className="text-4xl mb-4">🌍</div>
               <h3 className="text-xl font-semibold text-white mb-2">
@@ -135,14 +145,14 @@ export function AboutPage() {
           <h2 className="text-3xl font-bold text-white mb-12 text-center">
             Meet the Team
           </h2>
-          
+
           <div className="grid md:grid-cols-3 gap-8">
             {[
               { name: 'Henok Girma', role: 'Founder & Lead Developer', emoji: '👨‍💻' },
               { name: 'Astronomy Expert', role: 'Content Director', emoji: '🔭' },
               { name: 'Community Manager', role: 'Engagement Lead', emoji: '👥' },
             ].map((member, index) => (
-              <div 
+              <div
                 key={index}
                 className="text-center p-6 bg-slate-900 rounded-xl border border-white/10"
               >

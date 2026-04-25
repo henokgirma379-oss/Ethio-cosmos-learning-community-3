@@ -4,49 +4,50 @@ import { ArrowRight, Trash2, Bookmark } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { useAuth } from '@/context/AuthContext';
-import { fetchBookmarks, removeBookmark } from '@/services/bookmarks';
+import { getBookmarks, removeBookmark } from '@/services/cms';
 import type { Bookmark as BookmarkType } from '@/types';
 
 export function BookmarksPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
-  
+
   const [bookmarks, setBookmarks] = useState<BookmarkType[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Redirect if not logged in
-  useEffect(() => {
-    if (!user && !loading) {
-      navigate('/login');
-    }
-  }, [user, loading, navigate]);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
     const loadBookmarks = async () => {
       if (!user) return;
 
       try {
         setLoading(true);
-        const data = await fetchBookmarks(user.id);
-        setBookmarks(data);
-      } catch (error) {
-        console.error('Error loading bookmarks:', error);
+        setError(null);
+        const data = await getBookmarks(user.id);
+        if (!cancelled) setBookmarks(data);
+      } catch (err) {
+        console.error('Error loading bookmarks:', err);
+        if (!cancelled) setError('Failed to load bookmarks. Please try again.');
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     loadBookmarks();
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   const handleRemoveBookmark = async (bookmarkId: string) => {
     if (!user) return;
 
     try {
-      await removeBookmark(user.id, bookmarkId);
-      setBookmarks(bookmarks.filter((b) => b.id !== bookmarkId));
-    } catch (error) {
-      console.error('Error removing bookmark:', error);
+      await removeBookmark(bookmarkId);
+      setBookmarks((prev) => prev.filter((b) => b.id !== bookmarkId));
+    } catch (err) {
+      console.error('Error removing bookmark:', err);
+      setError('Failed to remove bookmark. Please try again.');
     }
   };
 
@@ -69,6 +70,12 @@ export function BookmarksPage() {
           <h1 className="text-3xl font-bold text-white">Your Bookmarks</h1>
         </div>
 
+        {error && (
+          <div className="bg-red-500/20 border border-red-500 text-red-200 px-4 py-2 rounded-lg mb-6">
+            {error}
+          </div>
+        )}
+
         {bookmarks.length === 0 ? (
           <div className="text-center py-16 bg-slate-900/50 rounded-xl border border-white/10">
             <Bookmark className="w-16 h-16 text-gray-600 mx-auto mb-4" />
@@ -89,7 +96,7 @@ export function BookmarksPage() {
         ) : (
           <div className="space-y-4">
             {bookmarks.map((bookmark) => (
-              <Card 
+              <Card
                 key={bookmark.id}
                 className="bg-slate-900 border-white/10 hover:border-orange-500/30 transition-all"
               >
@@ -99,20 +106,21 @@ export function BookmarksPage() {
                       <h3 className="text-lg font-semibold text-white mb-1">
                         {bookmark.title}
                       </h3>
-                      {bookmark.description && (
-                        <p className="text-gray-400 text-sm mb-3">
-                          {bookmark.description}
+                      {bookmark.type && (
+                        <p className="text-gray-500 text-xs uppercase tracking-wide mb-3">
+                          {bookmark.type}
                         </p>
                       )}
-                      <a
-                        href={bookmark.url}
+                      <button
+                        type="button"
+                        onClick={() => navigate(bookmark.url)}
                         className="inline-flex items-center text-sm text-orange-500 hover:text-orange-400"
                       >
                         Go to Lesson
                         <ArrowRight className="w-4 h-4 ml-1" />
-                      </a>
+                      </button>
                     </div>
-                    
+
                     <button
                       onClick={() => handleRemoveBookmark(bookmark.id)}
                       className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-all"

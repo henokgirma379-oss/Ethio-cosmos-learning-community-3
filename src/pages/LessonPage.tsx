@@ -1,5 +1,6 @@
 import { useParams, Link } from 'react-router-dom';
 import { useCms } from '@/context/CmsContext';
+import { useSubtopics, useLesson } from '@/hooks/use-cms-data';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/supabase';
 import { ArrowLeft, ArrowRight, BookmarkPlus, BookmarkCheck, CheckCircle } from 'lucide-react';
@@ -7,17 +8,23 @@ import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { SafeImage } from '@/components/SafeImage';
 import { useState, useEffect } from 'react';
-import { isBookmarked as checkIsBookmarked } from '@/services/cms';
-import { isLessonCompleted as checkIsLessonCompleted, markLessonCompleted } from '@/services/cms';
+import {
+  isBookmarked as checkIsBookmarked,
+  isLessonCompleted as checkIsLessonCompleted,
+  markLessonCompleted,
+} from '@/services/cms';
 
 export default function LessonPage() {
   const { topicId, lessonId } = useParams<{ topicId: string; lessonId: string }>();
-  const { topics: topicsHook, subtopics: subtopicsHook, lesson: lessonHook } = useCms();
+  const { topics: topicsHook } = useCms();
   const { user } = useAuth();
-  
+
   const { topics, loading: topicsLoading, error: topicsError } = topicsHook;
-  const { subtopics, loading: subtopicsLoading, error: subtopicsError } = subtopicsHook(topicId ?? null);
-  const { lesson, loading: lessonLoading, error: lessonError } = lessonHook(lessonId ?? null);
+  // Parameterized hooks are called directly so they stay valid React hooks.
+  const { subtopics, loading: subtopicsLoading, error: subtopicsError } =
+    useSubtopics(topicId ?? null);
+  const { lesson, loading: lessonLoading, error: lessonError } =
+    useLesson(lessonId ?? null);
 
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);

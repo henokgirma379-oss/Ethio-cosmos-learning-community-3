@@ -12,6 +12,7 @@ import type {
   QuizQuestion,
   UserProgress,
   Bookmark,
+  AboutContent,
 } from "@/types";
 
 // Helper to fetch single site content item
@@ -56,9 +57,8 @@ export const updateHomepageFeaturedTopics = (data: FeaturedTopic[]) =>
   updateSiteContent("homepage_featured_topics", data);
 
 // --- About Page Content ---
-export const getAboutContent = () =>
-  getSiteContent<{ missionText: string; whoWeAreText1: string; whoWeAreText2: string; missionImage: string; whoWeAreImage1: string; whoWeAreImage2: string }>( "about_content");
-export const updateAboutContent = (data: { missionText: string; whoWeAreText1: string; whoWeAreText2: string; missionImage: string; whoWeAreImage1: string; whoWeAreImage2: string }) =>
+export const getAboutContent = () => getSiteContent<AboutContent>("about_content");
+export const updateAboutContent = (data: AboutContent) =>
   updateSiteContent("about_content", data);
 
 // --- Materials Page Content ---

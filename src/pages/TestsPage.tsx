@@ -3,9 +3,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, XCircle } from 'lucide-react';
 import { useCms } from '@/context/CmsContext';
+import { useQuizQuestions } from '@/hooks/use-cms-data';
 
 export default function TestsPage() {
-  const { quizzes: quizzesHook, quizQuestions: quizQuestionsHookFactory } = useCms();
+  const { quizzes: quizzesHook } = useCms();
   const { quizzes, loading: quizzesLoading, error: quizzesError } = quizzesHook;
 
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
@@ -15,7 +16,11 @@ export default function TestsPage() {
   const [score, setScore] = useState(0);
   const [userAnswers, setUserAnswers] = useState<number[]>([]);
 
-  const { quizQuestions, loading: quizQuestionsLoading, error: quizQuestionsError } = quizQuestionsHookFactory(selectedQuizId);
+  const {
+    quizQuestions,
+    loading: quizQuestionsLoading,
+    error: quizQuestionsError,
+  } = useQuizQuestions(selectedQuizId);
 
   const currentQuiz = quizzes.find(q => q.id === selectedQuizId);
   const currentQuestion = quizQuestions[currentQuestionIndex];

@@ -1,16 +1,23 @@
 import { useParams, Link } from 'react-router-dom';
 import { useCms } from '@/context/CmsContext';
+import { useSubtopics } from '@/hooks/use-cms-data';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function TopicDetailPage() {
   const { topicId } = useParams<{ topicId: string }>();
-  const { topics: topicsHook, subtopics: subtopicsHook } = useCms();
-
+  const { topics: topicsHook } = useCms();
   const { topics, loading: topicsLoading, error: topicsError } = topicsHook;
-  const { subtopics, loading: subtopicsLoading, error: subtopicsError } = subtopicsHook(topicId ?? null);
 
-  const topic = topics.find(t => t.id === topicId);
+  // useSubtopics is intentionally called directly here (rather than going
+  // through the context) so it stays a normal, parameterized React hook.
+  const {
+    subtopics,
+    loading: subtopicsLoading,
+    error: subtopicsError,
+  } = useSubtopics(topicId ?? null);
+
+  const topic = topics.find((t) => t.id === topicId);
 
   if (topicsLoading || subtopicsLoading) {
     return (
@@ -47,7 +54,7 @@ export default function TopicDetailPage() {
   return (
     <div className="min-h-screen pt-16">
       {/* Hero Section */}
-      <section 
+      <section
         className="py-16 relative"
         style={{
           backgroundImage: `linear-gradient(to bottom, rgba(5, 8, 16, 0.7), rgba(10, 14, 26, 0.9)), url(${topic.image_url})`,
@@ -74,7 +81,7 @@ export default function TopicDetailPage() {
       <section className="py-16 bg-[#0a0e1a]">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
           <h2 className="text-2xl font-bold text-white mb-8">Lessons</h2>
-          
+
           {subtopics.length === 0 ? (
             <div className="text-center py-12">
               <p className="text-gray-400">No lessons available yet. Check back soon!</p>

@@ -1,7 +1,11 @@
-import { useEffect, useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
 import { useCms } from '@/context/CmsContext';
+import {
+  useSubtopics,
+  useLesson,
+  useQuizQuestions,
+} from '@/hooks/use-cms-data';
 import { isValidConfig } from '@/supabase';
 import { uploadImage } from '@/services/cms';
 import { Button } from '@/components/ui/button';
@@ -20,8 +24,27 @@ import type {
   PdfItem,
   Quiz,
   QuizQuestion,
+  AboutContent,
 } from '@/types';
-import { v4 as uuidv4 } from 'uuid';
+
+const DEFAULT_ABOUT: AboutContent = {
+  missionText: '',
+  whoWeAreText1: '',
+  whoWeAreText2: '',
+  missionImage: '',
+  whoWeAreImage1: '',
+  whoWeAreImage2: '',
+};
+
+// Use the platform's built-in UUID generator instead of pulling in the `uuid`
+// package, which wasn't actually listed in package.json.
+function newId(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Extremely defensive fallback (shouldn't be needed in any modern browser).
+  return `id-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 // ─── Image Upload Component ───────────────────────────────────────────────────
 interface ImageUploadProps {
@@ -90,17 +113,13 @@ function ImageUpload({ currentImage, onImageUploaded, label }: ImageUploadProps)
 
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const navigate = useNavigate();
-  const { user, isAdmin } = useAuth();
-  const { 
+  const { user } = useAuth();
+  const {
     homepageHero, homepageFeatureCards, homepageFeaturedTopics,
     aboutContent,
     materialsGalleryImages, materialsVideos, materialsPdfs,
     topics: topicsHook,
-    subtopics: subtopicsHookFactory,
-    lesson: lessonHookFactory,
     quizzes: quizzesHook,
-    quizQuestions: quizQuestionsHookFactory,
   } = useCms();
 
   const [activeTab, setActiveTab] = useState('homepage');
@@ -108,18 +127,20 @@ export default function AdminPage() {
   const [selectedSubtopicId, setSelectedSubtopicId] = useState<string | null>(null);
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);
 
-  const { topics, addTopic, editTopic, removeTopic, loading: topicsLoading, error: topicsError } = topicsHook;
-  const { subtopics, addSubtopic, editSubtopic, removeSubtopic, loading: subtopicsLoading, error: subtopicsError } = subtopicsHookFactory(selectedTopicId);
-  const { lesson, saveLesson, loading: lessonLoading, error: lessonError } = lessonHookFactory(selectedSubtopicId);
+  // Parameterized hooks are called directly here (proper React hooks usage)
+  // instead of through factory functions on the context.
+  const { topics, addTopic, editTopic, removeTopic, fetchTopics, loading: topicsLoading, error: topicsError } = topicsHook;
+  const { subtopics, addSubtopic, editSubtopic, removeSubtopic, fetchSubtopics, loading: subtopicsLoading, error: subtopicsError } =
+    useSubtopics(selectedTopicId);
+  const { lesson, saveLesson, loading: lessonLoading, error: lessonError } =
+    useLesson(selectedSubtopicId);
   const { quizzes, addQuiz, editQuiz, removeQuiz, loading: quizzesLoading, error: quizzesError } = quizzesHook;
-  const { quizQuestions, addQuizQuestion, editQuizQuestion, removeQuizQuestion, loading: quizQuestionsLoading, error: quizQuestionsError } = quizQuestionsHookFactory(selectedQuizId);
+  const { quizQuestions, addQuizQuestion, editQuizQuestion, removeQuizQuestion, loading: quizQuestionsLoading, error: quizQuestionsError } =
+    useQuizQuestions(selectedQuizId);
 
-  useEffect(() => {
-    if (!user) navigate('/login');
-    else if (!isAdmin) navigate('/');
-  }, [user, isAdmin, navigate]);
-
-  if (!user || !isAdmin) return null;
+  // Auth guarding (login + admin role check) is handled by <ProtectedRoute>.
+  // We only need the user here for display.
+  if (!user) return null;
 
   const allLoading = topicsLoading || subtopicsLoading || lessonLoading || quizzesLoading || quizQuestionsLoading || homepageHero.loading || homepageFeatureCards.loading || homepageFeaturedTopics.loading || aboutContent.loading || materialsGalleryImages.loading || materialsVideos.loading || materialsPdfs.loading;
   const anyError = topicsError || subtopicsError || lessonError || quizzesError || quizQuestionsError || homepageHero.error || homepageFeatureCards.error || homepageFeaturedTopics.error || aboutContent.error || materialsGalleryImages.error || materialsVideos.error || materialsPdfs.error;
@@ -154,7 +175,7 @@ export default function AdminPage() {
   };
 
   const addFeaturedTopic = async () => {
-    const newTopic: FeaturedTopic = { id: uuidv4(), title: 'New Topic', description: 'Description', image_url: '/images/topic-fundamentals.jpg' };
+    const newTopic: FeaturedTopic = { id: newId(), title: 'New Topic', description: 'Description', image_url: '/images/topic-fundamentals.jpg' };
     await homepageFeaturedTopics.saveFeaturedTopics([...homepageFeaturedTopics.featuredTopics, newTopic]);
   };
 
@@ -193,7 +214,7 @@ export default function AdminPage() {
     await editTopic(updatedTopics[i].id, { order_index: i });
     await editTopic(updatedTopics[swap].id, { order_index: swap });
     // Re-fetch to ensure UI is consistent with DB order
-    topicsHook.fetchTopics();
+    fetchTopics();
   };
 
   // ── Subtopics ───────────────────────────────────────────────────────────────
@@ -228,7 +249,7 @@ export default function AdminPage() {
     await editSubtopic(updatedSubtopics[i].id, { order_index: i });
     await editSubtopic(updatedSubtopics[swap].id, { order_index: swap });
     // Re-fetch to ensure UI is consistent with DB order
-    subtopicsHookFactory(selectedTopicId).fetchSubtopics();
+    fetchSubtopics();
   };
 
   // ── Lessons ─────────────────────────────────────────────────────────────────
@@ -270,14 +291,15 @@ export default function AdminPage() {
   };
 
   // ── About Page ──────────────────────────────────────────────────────────────
-  const handleUpdateAboutContent = async (field: string, value: string) => {
-    const updatedContent = { ...aboutContent.aboutContent, [field]: value };
+  const handleUpdateAboutContent = async (field: keyof AboutContent, value: string) => {
+    const base = aboutContent.aboutContent ?? DEFAULT_ABOUT;
+    const updatedContent: AboutContent = { ...base, [field]: value };
     await aboutContent.saveAboutContent(updatedContent);
   };
 
   // ── Materials ───────────────────────────────────────────────────────────────
   const handleAddGalleryImage = async () => {
-    const newImage: GalleryImage = { id: uuidv4(), url: '', title: 'New Image' };
+    const newImage: GalleryImage = { id: newId(), url: '', title: 'New Image' };
     await materialsGalleryImages.saveGalleryImages([...materialsGalleryImages.galleryImages, newImage]);
   };
 
@@ -294,7 +316,7 @@ export default function AdminPage() {
   };
 
   const handleAddVideo = async () => {
-    const newVideo: VideoItem = { id: uuidv4(), url: '', thumbnail: '', title: 'New Video' };
+    const newVideo: VideoItem = { id: newId(), url: '', thumbnail: '', title: 'New Video' };
     await materialsVideos.saveVideos([...materialsVideos.videos, newVideo]);
   };
 
@@ -311,7 +333,7 @@ export default function AdminPage() {
   };
 
   const handleAddPdf = async () => {
-    const newPdf: PdfItem = { id: uuidv4(), url: '', title: 'New PDF', label: 'New PDF' };
+    const newPdf: PdfItem = { id: newId(), url: '', title: 'New PDF', label: 'New PDF' };
     await materialsPdfs.savePdfs([...materialsPdfs.pdfs, newPdf]);
   };
 
