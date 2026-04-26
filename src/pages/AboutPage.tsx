@@ -1,5 +1,5 @@
 import { FallbackImage } from '@/components/MediaFallback';
-import { useCms } from '@/context/CmsContext';
+import { useAboutContent } from '@/hooks/use-cms-data';
 import type { AboutContent } from '@/types';
 
 const ABOUT_FALLBACK: AboutContent = {
@@ -12,7 +12,7 @@ const ABOUT_FALLBACK: AboutContent = {
 };
 
 export function AboutPage() {
-  const { aboutContent } = useCms();
+  const aboutContent = useAboutContent();
   const about: AboutContent = aboutContent.aboutContent ?? ABOUT_FALLBACK;
 
   return (

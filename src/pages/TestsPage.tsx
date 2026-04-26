@@ -2,11 +2,11 @@ import { useState, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CheckCircle, XCircle } from 'lucide-react';
-import { useCms } from '@/context/CmsContext';
+import { useQuizzes } from '@/hooks/use-cms-data';
 import { useQuizQuestions } from '@/hooks/use-cms-data';
 
 export default function TestsPage() {
-  const { quizzes: quizzesHook } = useCms();
+  const quizzesHook = useQuizzes();
   const { quizzes, loading: quizzesLoading, error: quizzesError } = quizzesHook;
 
   const [selectedQuizId, setSelectedQuizId] = useState<string | null>(null);

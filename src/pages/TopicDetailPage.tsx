@@ -1,12 +1,12 @@
 import { useParams, Link } from 'react-router-dom';
-import { useCms } from '@/context/CmsContext';
+import { useTopics } from '@/hooks/use-cms-data';
 import { useSubtopics } from '@/hooks/use-cms-data';
 import { ArrowRight, ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export default function TopicDetailPage() {
   const { topicId } = useParams<{ topicId: string }>();
-  const { topics: topicsHook } = useCms();
+  const topicsHook = useTopics();
   const { topics, loading: topicsLoading, error: topicsError } = topicsHook;
 
   // useSubtopics is intentionally called directly here (rather than going

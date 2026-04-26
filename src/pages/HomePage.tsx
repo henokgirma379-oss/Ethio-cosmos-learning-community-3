@@ -1,11 +1,13 @@
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
-import { useCms } from '@/context/CmsContext';
+import { useHomepageHero, useHomepageFeatureCards, useHomepageFeaturedTopics } from '@/hooks/use-cms-data';
 import { Button } from '@/components/ui/button';
 
 export default function HomePage() {
   const { user } = useAuth();
-  const { homepageHero, homepageFeatureCards, homepageFeaturedTopics } = useCms();
+  const homepageHero = useHomepageHero();
+  const homepageFeatureCards = useHomepageFeatureCards();
+  const homepageFeaturedTopics = useHomepageFeaturedTopics();
   const navigate = useNavigate();
 
   const scrollToFeatures = () => {

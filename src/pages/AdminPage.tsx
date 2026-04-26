@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useAuth } from '@/context/AuthContext';
-import { useCms } from '@/context/CmsContext';
+import { useHomepageHero, useHomepageFeatureCards, useHomepageFeaturedTopics, useAboutContent, useMaterialsGalleryImages, useMaterialsVideos, useMaterialsPdfs, useTopics, useQuizzes } from '@/hooks/use-cms-data';
 import {
   useSubtopics,
   useLesson,
@@ -114,13 +114,15 @@ function ImageUpload({ currentImage, onImageUploaded, label }: ImageUploadProps)
 // ─── Admin Page ───────────────────────────────────────────────────────────────
 export default function AdminPage() {
   const { user } = useAuth();
-  const {
-    homepageHero, homepageFeatureCards, homepageFeaturedTopics,
-    aboutContent,
-    materialsGalleryImages, materialsVideos, materialsPdfs,
-    topics: topicsHook,
-    quizzes: quizzesHook,
-  } = useCms();
+  const homepageHero = useHomepageHero();
+  const homepageFeatureCards = useHomepageFeatureCards();
+  const homepageFeaturedTopics = useHomepageFeaturedTopics();
+  const aboutContent = useAboutContent();
+  const materialsGalleryImages = useMaterialsGalleryImages();
+  const materialsVideos = useMaterialsVideos();
+  const materialsPdfs = useMaterialsPdfs();
+  const topicsHook = useTopics();
+  const quizzesHook = useQuizzes();
 
   const [activeTab, setActiveTab] = useState('homepage');
   const [selectedTopicId, setSelectedTopicId] = useState<string | null>(null);

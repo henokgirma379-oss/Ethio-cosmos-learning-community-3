@@ -1,88 +1,35 @@
 import { createContext, useContext, type ReactNode } from 'react';
-import {
-  useHomepageHero,
-  useHomepageFeatureCards,
-  useHomepageFeaturedTopics,
-  useAboutContent,
-  useMaterialsGalleryImages,
-  useMaterialsVideos,
-  useMaterialsPdfs,
-  useTopics,
-  useQuizzes,
-} from '@/hooks/use-cms-data';
 
 /**
- * CmsContext only exposes hooks that take NO parameters and whose state
- * benefits from being shared across the whole app (homepage content, the full
- * topics list, the quiz list, etc.).
+ * CmsContext is now a lightweight shell.
  *
- * Hooks that depend on a runtime id — `useSubtopics(topicId)`,
- * `useLesson(subtopicId)`, `useQuizQuestions(quizId)` — must be called
- * directly inside the page that needs them. Wrapping them as factories on the
- * context (the previous implementation) silently violated the React Rules of
- * Hooks because the hook calls happened in the consumer's render rather than
- * in the provider, leading to confusing state-loss bugs and ESLint disables.
+ * The old version fired 9 Supabase queries the moment the app loaded —
+ * before login, during login, always. On Supabase free tier this flooded
+ * the connection pool and caused login to appear frozen for minutes.
+ *
+ * Fix: each page now fetches only the data it actually needs, only when
+ * the user visits that page. Nothing fires at app startup.
+ *
+ * Hooks that individual pages use (useTopics, useQuizzes, etc.) are still
+ * exported from use-cms-data.ts — pages just call them directly.
  */
 interface CmsContextType {
-  // Homepage
-  homepageHero: ReturnType<typeof useHomepageHero>;
-  homepageFeatureCards: ReturnType<typeof useHomepageFeatureCards>;
-  homepageFeaturedTopics: ReturnType<typeof useHomepageFeaturedTopics>;
-
-  // About Page
-  aboutContent: ReturnType<typeof useAboutContent>;
-
-  // Materials
-  materialsGalleryImages: ReturnType<typeof useMaterialsGalleryImages>;
-  materialsVideos: ReturnType<typeof useMaterialsVideos>;
-  materialsPdfs: ReturnType<typeof useMaterialsPdfs>;
-
-  // Learning Content (top level only — see note above)
-  topics: ReturnType<typeof useTopics>;
-
-  // Quizzes (top level list)
-  quizzes: ReturnType<typeof useQuizzes>;
+  // Intentionally empty — pages fetch their own data lazily.
+  // This shell exists so any existing useCms() calls don't break.
+  _placeholder: true;
 }
 
-const CmsContext = createContext<CmsContextType | undefined>(undefined);
+const CmsContext = createContext<CmsContextType>({ _placeholder: true });
 
 export function CmsProvider({ children }: { children: ReactNode }) {
-  const homepageHero = useHomepageHero();
-  const homepageFeatureCards = useHomepageFeatureCards();
-  const homepageFeaturedTopics = useHomepageFeaturedTopics();
-
-  const aboutContent = useAboutContent();
-
-  const materialsGalleryImages = useMaterialsGalleryImages();
-  const materialsVideos = useMaterialsVideos();
-  const materialsPdfs = useMaterialsPdfs();
-
-  const topics = useTopics();
-  const quizzes = useQuizzes();
-
+  // No queries here. Zero. Pages load their own data.
   return (
-    <CmsContext.Provider
-      value={{
-        homepageHero,
-        homepageFeatureCards,
-        homepageFeaturedTopics,
-        aboutContent,
-        materialsGalleryImages,
-        materialsVideos,
-        materialsPdfs,
-        topics,
-        quizzes,
-      }}
-    >
+    <CmsContext.Provider value={{ _placeholder: true }}>
       {children}
     </CmsContext.Provider>
   );
 }
 
 export function useCms() {
-  const context = useContext(CmsContext);
-  if (context === undefined) {
-    throw new Error('useCms must be used within a CmsProvider');
-  }
-  return context;
+  return useContext(CmsContext);
 }

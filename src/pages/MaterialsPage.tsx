@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { Download, ExternalLink, Play, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useCms } from '@/context/CmsContext';
+import { useMaterialsGalleryImages, useMaterialsVideos, useMaterialsPdfs } from '@/hooks/use-cms-data';
 import { FallbackImage } from '@/components/MediaFallback';
 
 export function MaterialsPage() {
-  const { materialsGalleryImages, materialsVideos, materialsPdfs } = useCms();
+  const materialsGalleryImages = useMaterialsGalleryImages();
+  const materialsVideos = useMaterialsVideos();
+  const materialsPdfs = useMaterialsPdfs();
   const galleryImages = materialsGalleryImages.galleryImages;
   const videos = materialsVideos.videos;
   const pdfs = materialsPdfs.pdfs;

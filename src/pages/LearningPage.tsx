@@ -1,11 +1,11 @@
 import { Link } from 'react-router-dom';
 import { ArrowRight, BookOpen } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useCms } from '@/context/CmsContext';
+import { useTopics } from '@/hooks/use-cms-data';
 import { FallbackImage } from '@/components/MediaFallback';
 
 export function LearningPage() {
-  const { topics: topicsHook } = useCms();
+  const topicsHook = useTopics();
   const { topics, loading, error } = topicsHook;
 
   if (loading) {

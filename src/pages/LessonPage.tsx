@@ -1,5 +1,5 @@
 import { useParams, Link } from 'react-router-dom';
-import { useCms } from '@/context/CmsContext';
+import { useTopics } from '@/hooks/use-cms-data';
 import { useSubtopics, useLesson } from '@/hooks/use-cms-data';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/supabase';
@@ -16,7 +16,7 @@ import {
 
 export default function LessonPage() {
   const { topicId, lessonId } = useParams<{ topicId: string; lessonId: string }>();
-  const { topics: topicsHook } = useCms();
+  const topicsHook = useTopics();
   const { user } = useAuth();
 
   const { topics, loading: topicsLoading, error: topicsError } = topicsHook;
