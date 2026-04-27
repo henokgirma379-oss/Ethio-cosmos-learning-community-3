@@ -200,7 +200,7 @@ export default function Navbar() {
               ) : (
                 <Link to="/login">
                   <Button size="sm" className="bg-orange-500 hover:bg-orange-600 text-white">
-                    Sign Up
+                    Sign In
                   </Button>
                 </Link>
               )}
@@ -238,21 +238,22 @@ export default function Navbar() {
                   )}
                 </Link>
               ))}
-              {user && (
+              {user && privateNavLinks.map((link) => (
                 <Link
-                  to="/chat"
+                  key={link.path}
+                  to={link.path}
                   className={`relative px-1 py-3 text-sm font-medium transition-colors whitespace-nowrap ${
-                    isActive('/chat')
+                    isActive(link.path)
                       ? 'text-orange-500'
                       : 'text-gray-400 hover:text-white'
                   }`}
                 >
-                  Chat
-                  {isActive('/chat') && (
+                  {link.label}
+                  {isActive(link.path) && (
                     <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-orange-500" />
                   )}
                 </Link>
-              )}
+              ))}
             </div>
           </div>
         </div>
@@ -317,7 +318,7 @@ export default function Navbar() {
                 className="px-3 py-2 text-sm font-medium text-orange-500 hover:bg-orange-500/10 rounded-md mt-2"
                 onClick={() => setMobileMenuOpen(false)}
               >
-                Login
+                Sign In
               </Link>
             )}
           </div>

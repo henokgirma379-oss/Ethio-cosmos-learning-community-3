@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/supabase';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,7 +31,6 @@ interface SubtopicRow {
 }
 
 export default function ProgressPage() {
-  const navigate = useNavigate();
   const { user, loading: authLoading } = useAuth();
 
   const [topicProgress, setTopicProgress] = useState<TopicProgress[]>([]);
@@ -40,10 +38,6 @@ export default function ProgressPage() {
   const [totalLessons, setTotalLessons] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!authLoading && !user) navigate('/login');
-  }, [user, authLoading, navigate]);
 
   useEffect(() => {
     if (!user) return;

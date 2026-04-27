@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { useMaterialsGalleryImages, useMaterialsVideos, useMaterialsPdfs } from '@/hooks/use-cms-data';
 import { FallbackImage } from '@/components/MediaFallback';
 
-export function MaterialsPage() {
+export default function MaterialsPage() {
   const materialsGalleryImages = useMaterialsGalleryImages();
   const materialsVideos = useMaterialsVideos();
   const materialsPdfs = useMaterialsPdfs();
@@ -194,4 +194,4 @@ export function MaterialsPage() {
   );
 }
 
-export default MaterialsPage;
+

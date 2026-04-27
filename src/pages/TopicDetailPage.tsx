@@ -57,7 +57,7 @@ export default function TopicDetailPage() {
       <section
         className="py-16 relative"
         style={{
-          backgroundImage: `linear-gradient(to bottom, rgba(5, 8, 16, 0.7), rgba(10, 14, 26, 0.9)), url(${topic.image_url})`,
+          backgroundImage: `linear-gradient(to bottom, rgba(5, 8, 16, 0.7), rgba(10, 14, 26, 0.9)), url(${topic.image_url || '/images/topic-fundamentals.jpg'})`,
           backgroundSize: 'cover',
           backgroundPosition: 'center',
         }}

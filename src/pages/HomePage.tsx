@@ -25,22 +25,6 @@ export default function HomePage() {
     }
   };
 
-  if (homepageHero.loading || homepageFeatureCards.loading || homepageFeaturedTopics.loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a] text-white">
-        Loading homepage content...
-      </div>
-    );
-  }
-
-  if (homepageHero.error || homepageFeatureCards.error || homepageFeaturedTopics.error) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-[#0a0e1a] text-red-400">
-        Error loading homepage content: {homepageHero.error || homepageFeatureCards.error || homepageFeaturedTopics.error}
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen">
       {/* Hero Section */}
@@ -55,10 +39,10 @@ export default function HomePage() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-32">
           <div className="max-w-2xl">
             <h1 className="text-4xl sm:text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight">
-              {homepageHero.hero?.heroTitle}
+              {homepageHero.hero?.heroTitle || 'Explore the Cosmos with Ethiopia'}
             </h1>
             <p className="text-xl text-gray-300 mb-8">
-              {homepageHero.hero?.heroSubtitle}
+              {homepageHero.hero?.heroSubtitle || 'Join the EthioCosmos Learning Community'}
             </p>
             <div className="flex flex-wrap gap-4">
               {!user && (
@@ -86,18 +70,38 @@ export default function HomePage() {
       {/* Feature Cards Section */}
       <section id="feature-cards" className="py-16 bg-[#0a0e1a]">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-3 gap-6 -mt-32 relative z-10">
-            {homepageFeatureCards.featureCards.map((card, index) => (
-              <div 
-                key={index}
-                className="bg-white rounded-xl p-8 shadow-xl"
-              >
-                <div className="text-4xl mb-4">{card.icon}</div>
-                <h3 className="text-xl font-bold text-gray-900 mb-2">{card.title}</h3>
-                <p className="text-gray-600">{card.description}</p>
-              </div>
-            ))}
-          </div>
+          {homepageFeatureCards.loading ? (
+            <div className="grid md:grid-cols-3 gap-6 -mt-32 relative z-10">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="bg-white/10 rounded-xl p-8 shadow-xl animate-pulse h-48"
+                >
+                  <div className="w-12 h-12 bg-white/20 rounded mb-4" />
+                  <div className="h-6 bg-white/20 rounded mb-3 w-2/3" />
+                  <div className="h-4 bg-white/10 rounded w-full" />
+                  <div className="h-4 bg-white/10 rounded w-5/6 mt-2" />
+                </div>
+              ))}
+            </div>
+          ) : homepageFeatureCards.error ? (
+            <div className="text-red-400 text-sm text-center py-4">
+              {homepageFeatureCards.error}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-6 -mt-32 relative z-10">
+              {homepageFeatureCards.featureCards.map((card, index) => (
+                <div
+                  key={index}
+                  className="bg-white rounded-xl p-8 shadow-xl"
+                >
+                  <div className="text-4xl mb-4">{card.icon}</div>
+                  <h3 className="text-xl font-bold text-gray-900 mb-2">{card.title}</h3>
+                  <p className="text-gray-600">{card.description}</p>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
 
@@ -113,26 +117,52 @@ export default function HomePage() {
             </p>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-8">
-            {homepageFeaturedTopics.featuredTopics.map((topic) => (
-              <div 
-                key={topic.id}
-                className="bg-slate-900/50 rounded-xl overflow-hidden border border-white/10 hover:border-orange-500/50 transition-all group"
-              >
-                <div className="h-48 overflow-hidden">
-                  <img 
-                    src={topic.image_url} 
-                    alt={topic.title}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                  />
+          {homepageFeaturedTopics.loading ? (
+            <div className="grid md:grid-cols-3 gap-8">
+              {[0, 1, 2].map((i) => (
+                <div
+                  key={i}
+                  className="bg-slate-900/50 rounded-xl overflow-hidden border border-white/10 animate-pulse"
+                >
+                  <div className="h-48 bg-white/10" />
+                  <div className="p-6">
+                    <div className="h-6 bg-white/10 rounded mb-3 w-2/3" />
+                    <div className="h-4 bg-white/5 rounded w-full" />
+                    <div className="h-4 bg-white/5 rounded w-5/6 mt-2" />
+                  </div>
                 </div>
-                <div className="p-6">
-                  <h3 className="text-xl font-bold text-white mb-2">{topic.title}</h3>
-                  <p className="text-gray-400">{topic.description}</p>
+              ))}
+            </div>
+          ) : homepageFeaturedTopics.error ? (
+            <div className="text-red-400 text-sm text-center py-4">
+              {homepageFeaturedTopics.error}
+            </div>
+          ) : homepageFeaturedTopics.featuredTopics.length === 0 ? (
+            <div className="text-center py-8">
+              <p className="text-gray-400">No featured topics yet</p>
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-3 gap-8">
+              {homepageFeaturedTopics.featuredTopics.map((topic) => (
+                <div
+                  key={topic.id}
+                  className="bg-slate-900/50 rounded-xl overflow-hidden border border-white/10 hover:border-orange-500/50 transition-all group"
+                >
+                  <div className="h-48 overflow-hidden">
+                    <img
+                      src={topic.image_url || (topic as any).image || '/images/topic-fundamentals.jpg'}
+                      alt={topic.title}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                    />
+                  </div>
+                  <div className="p-6">
+                    <h3 className="text-xl font-bold text-white mb-2">{topic.title}</h3>
+                    <p className="text-gray-400">{topic.description}</p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </div>
       </section>
     </div>

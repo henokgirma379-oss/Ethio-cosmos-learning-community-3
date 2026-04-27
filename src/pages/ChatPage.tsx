@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/context/AuthContext';
 import { supabase } from '@/supabase';
 import { Button } from '@/components/ui/button';
@@ -34,7 +33,6 @@ function rowToMessage(row: ChatMessageRow): ChatMessage {
 }
 
 export default function ChatPage() {
-  const navigate = useNavigate();
   const { user } = useAuth();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -42,10 +40,6 @@ export default function ChatPage() {
   const [error, setError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (!user) navigate('/login');
-  }, [user, navigate]);
 
   useEffect(() => {
     if (!user) return;
@@ -116,6 +110,10 @@ export default function ChatPage() {
   const sendMessage = async () => {
     if (!user || !newMessage.trim()) return;
     const text = newMessage.trim();
+    if (text.length > 1000) {
+      setError('Message is too long. Maximum 1000 characters.');
+      return;
+    }
     setNewMessage('');
     setError(null);
     try {
@@ -173,7 +171,7 @@ export default function ChatPage() {
   if (!user) return null;
 
   return (
-    <div className="min-h-screen pt-16 bg-[#0a0e1a] flex flex-col">
+    <div className="min-h-screen bg-[#0a0e1a] flex flex-col">
       <div className="bg-slate-900 border-b border-white/10 px-4 py-3">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <h1 className="text-xl font-bold text-white">Community Chat</h1>
