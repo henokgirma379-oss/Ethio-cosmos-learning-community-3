@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { getBookmarks, removeBookmark } from '@/services/cms';
 import type { Bookmark as BookmarkType } from '@/types';
 
-export function BookmarksPage() {
+export default function BookmarksPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
 
@@ -113,7 +113,11 @@ export function BookmarksPage() {
                       )}
                       <button
                         type="button"
-                        onClick={() => navigate(bookmark.url)}
+                        onClick={() => {
+                          if (bookmark.url.startsWith('/')) {
+                            navigate(bookmark.url);
+                          }
+                        }}
                         className="inline-flex items-center text-sm text-orange-500 hover:text-orange-400"
                       >
                         Go to Lesson
@@ -138,5 +142,3 @@ export function BookmarksPage() {
     </div>
   );
 }
-
-export default BookmarksPage;

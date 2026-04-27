@@ -15,7 +15,7 @@ import {
 } from '@/services/cms';
 
 export default function LessonPage() {
-  const { topicId, lessonId } = useParams<{ topicId: string; lessonId: string }>();
+  const { topicId, subtopicId } = useParams<{ topicId: string; subtopicId: string }>();
   const topicsHook = useTopics();
   const { user } = useAuth();
 
@@ -24,7 +24,7 @@ export default function LessonPage() {
   const { subtopics, loading: subtopicsLoading, error: subtopicsError } =
     useSubtopics(topicId ?? null);
   const { lesson, loading: lessonLoading, error: lessonError } =
-    useLesson(lessonId ?? null);
+    useLesson(subtopicId ?? null);
 
   const [isBookmarked, setIsBookmarked] = useState(false);
   const [isCompleted, setIsCompleted] = useState(false);
@@ -32,8 +32,8 @@ export default function LessonPage() {
   const [error, setError] = useState<string | null>(null);
 
   const topic = topics.find(t => t.id === topicId);
-  const currentSubtopic = subtopics.find(s => s.id === lessonId);
-  const currentIndex = subtopics.findIndex(s => s.id === lessonId);
+  const currentSubtopic = subtopics.find(s => s.id === subtopicId);
+  const currentIndex = subtopics.findIndex(s => s.id === subtopicId);
   
   const prevLesson = currentIndex > 0 ? subtopics[currentIndex - 1] : null;
   const nextLesson = currentIndex < subtopics.length - 1 ? subtopics[currentIndex + 1] : null;
@@ -41,21 +41,21 @@ export default function LessonPage() {
 
   // Check bookmark and progress status on mount
   useEffect(() => {
-    if (!user || !currentSubtopic || !topicId || !lessonId) return;
+    if (!user || !currentSubtopic || !topicId || !subtopicId) return;
 
     const checkStatus = async () => {
       try {
-        const bookmarked = await checkIsBookmarked(user.id, `/learning/${topicId}/${lessonId}`);
+        const bookmarked = await checkIsBookmarked(user.id, `/learning/${topicId}/${subtopicId}`);
         setIsBookmarked(bookmarked);
 
-        const completed = await checkIsLessonCompleted(user.id, lessonId);
+        const completed = await checkIsLessonCompleted(user.id, subtopicId);
         setIsCompleted(completed);
       } catch (err) {
         console.error('Unexpected error checking status:', err);
       }
     };
     checkStatus();
-  }, [user, currentSubtopic, topicId, lessonId]);
+  }, [user, currentSubtopic, topicId, subtopicId]);
 
   const handleBookmark = async () => {
     if (!user) {
@@ -72,7 +72,7 @@ export default function LessonPage() {
           .from('bookmarks')
           .delete()
           .eq('user_id', user.id)
-          .eq('url', `/learning/${topicId}/${lessonId}`);
+          .eq('url', `/learning/${topicId}/${subtopicId}`);
 
         if (deleteError) throw deleteError;
         setIsBookmarked(false);
@@ -80,7 +80,7 @@ export default function LessonPage() {
         const { error: insertError } = await supabase.from('bookmarks').insert({
           user_id: user.id,
           title: currentSubtopic?.title || 'Untitled Lesson',
-          url: `/learning/${topicId}/${lessonId}`,
+          url: `/learning/${topicId}/${subtopicId}`,
           type: 'lesson',
         });
 
@@ -96,13 +96,13 @@ export default function LessonPage() {
   };
 
   const handleMarkCompleted = async () => {
-    if (!user || isCompleted || !lessonId) return;
+    if (!user || isCompleted || !subtopicId) return;
 
     setActionLoading(true);
     setError(null);
 
     try {
-      await markLessonCompleted(user.id, lessonId);
+      await markLessonCompleted(user.id, subtopicId);
       setIsCompleted(true);
     } catch (err) {
       console.error('Error marking lesson complete:', err);
@@ -154,7 +154,7 @@ export default function LessonPage() {
   const blocks = lesson?.content_blocks || defaultBlocks;
 
   return (
-    <div className="min-h-screen pt-16 bg-[#0a0e1a]">
+    <div className="min-h-screen bg-[#0a0e1a]">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {/* Breadcrumb */}
         <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">

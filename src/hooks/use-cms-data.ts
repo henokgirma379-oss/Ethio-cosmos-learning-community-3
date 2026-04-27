@@ -29,7 +29,10 @@ export function useHomepageHero() {
       try {
         setLoading(true);
         const data = await getHomepageHero();
-        setHero(data);
+        setHero(data ?? {
+          heroTitle:    'Explore the Cosmos with Ethiopia',
+          heroSubtitle: 'Join the EthioCosmos Learning Community — learn astronomy from Ethiopia to the universe'
+        });
       } catch (err) {
         setError("Failed to load homepage hero.");
         console.error(err);
@@ -65,7 +68,11 @@ export function useHomepageFeatureCards() {
       try {
         setLoading(true);
         const data = await getHomepageFeatureCards();
-        setFeatureCards(data || []);
+        setFeatureCards(data || [
+          { icon: '🔭', title: 'Astronomy Lessons',  description: 'Structured learning paths from basics to advanced topics'   },
+          { icon: '🌍', title: 'Ethiopian Context',  description: 'Explore the night sky from an Ethiopian perspective'         },
+          { icon: '🚀', title: 'Community Learning', description: 'Learn, discuss, and grow with fellow astronomy students'     },
+        ]);
       } catch (err) {
         setError("Failed to load feature cards.");
         console.error(err);

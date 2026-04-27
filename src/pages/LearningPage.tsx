@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { useTopics } from '@/hooks/use-cms-data';
 import { FallbackImage } from '@/components/MediaFallback';
 
-export function LearningPage() {
+export default function LearningPage() {
   const topicsHook = useTopics();
   const { topics, loading, error } = topicsHook;
 
@@ -104,5 +104,3 @@ export function LearningPage() {
     </div>
   );
 }
-
-export default LearningPage;

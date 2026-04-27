@@ -80,6 +80,24 @@ export default function TestsPage() {
     );
   }
 
+  if (!quizQuestionsLoading && selectedQuizId && quizQuestions.length === 0) {
+    return (
+      <Card className="bg-slate-900/50 border-white/10">
+        <CardContent className="p-8 text-center">
+          <p className="text-gray-400 mb-4">
+            This quiz has no questions yet. Check back soon!
+          </p>
+          <Button
+            onClick={() => setSelectedQuizId(null)}
+            className="bg-orange-500 hover:bg-orange-600 text-white"
+          >
+            Back to Quizzes
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
+
   return (
     <div className="min-h-screen pt-24 pb-12 bg-[#0a0e1a]">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8">
